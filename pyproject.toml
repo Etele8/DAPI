@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dapi"
+version = "0.1.0"
+description = "DAPI image discovery and loading utilities."
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "opencv-python",
+]
+
+[project.scripts]
+dapi-segment = "src.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
