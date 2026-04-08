@@ -14,18 +14,7 @@ from src.biomass.contours import ConnectedObject, extract_connected_objects, pol
 from src.biomass.qc import build_qc_flags, polygon_self_intersects, suspicious_merge
 from src.biomass.volume_baselines import equivalent_sphere_volume_from_area, rod_volume_from_area_and_length
 from src.biomass.volume_zeder import estimate_zeder_volume, longest_chord
-
-
-@dataclass(slots=True)
-class BiomassConfig:
-    microns_per_pixel: float | None = None
-    min_area_px2: float = 12.0
-    smoothing_points: int = 64
-    smoothing_window: int = 7
-    min_slice_length_px: float = 0.75
-    zeder_max_depth: int = 8
-    zeder_width_linearity_tol_px: float = 0.40
-    max_debug_panels: int = 24
+from src.config import BiomassConfig
 
 
 @dataclass(slots=True)

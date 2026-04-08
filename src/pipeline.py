@@ -5,11 +5,11 @@ from pathlib import Path
 
 import numpy as np
 
-from src.biomass import BiomassConfig, BiomassPipelineResult, run_biomass_stage
+from src.biomass import BiomassPipelineResult, run_biomass_stage
+from src.config import BiomassConfig, SegmentationConfig
 from src.io.loader import LoadedSample
 from src.preprocessing.mask_artifacts import combine_masks, create_border_mask, create_scale_bar_mask
 from src.segmentation.segment import (
-    SegmentationConfig,
     SegmentationResult,
     save_debug_outputs,
     segment_cells,

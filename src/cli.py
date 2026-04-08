@@ -4,8 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from src.biomass import BiomassConfig
-from src.config import default_config
+from src.config import apply_cli_overrides, default_config
 from src.io.discover import discover_samples
 from src.io.loader import load_sample
 from src.pipeline import run_segmentation_for_sample
@@ -71,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     data_roots = args.data_roots or ["data/samples"]
-    cfg = default_config(data_roots)
+    cfg = apply_cli_overrides(default_config(data_roots), microns_per_pixel=args.microns_per_pixel)
     discovered = discover_samples(cfg.discovery)
     discovered_by_stem = {sample.stem: sample for sample in discovered}
     selected_stems = _select_samples(args.sample, args.limit, [sample.stem for sample in discovered])
@@ -82,8 +81,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     for stem in selected_stems:
         sample = discovered_by_stem[stem]
         loaded = load_sample(sample)
-        biomass_config = BiomassConfig(microns_per_pixel=args.microns_per_pixel)
-        result = run_segmentation_for_sample(loaded, output_dir, biomass_config=biomass_config)
+        result = run_segmentation_for_sample(
+            loaded,
+            output_dir,
+            config=cfg.segmentation,
+            biomass_config=cfg.biomass,
+        )
         accepted_count = sum(region.accepted for region in result.segmentation.regions)
         kept_biomass = result.biomass.summary.n_objects_kept if result.biomass is not None else 0
         print(

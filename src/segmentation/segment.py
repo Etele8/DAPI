@@ -1,109 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import cv2
 import numpy as np
 
-
-ThresholdMethod = Literal["otsu", "otsu_positive", "percentile", "percentile_positive", "adaptive", "hysteresis"]
-
-
-@dataclass(slots=True)
-class PreprocessingConfig:
-    use_median_blur: bool = True
-    median_kernel_size: int = 3
-
-
-@dataclass(slots=True)
-class BlueDominanceConfig:
-    blue_green_weight: float = 0.6
-    blue_red_weight: float = 0.5
-    blue_channel_weight: float = 0.25
-    local_suppression_kernel_size: int = 35
-    local_suppression_strength: float = 0.95
-
-
-@dataclass(slots=True)
-class BlobEnhancementConfig:
-    source: Literal["value", "blue", "max_blue_value"] = "max_blue_value"
-    top_hat_kernel_size: int = 11
-    dog_sigma_small: float = 0.7
-    dog_sigma_large: float = 3.0
-    top_hat_weight: float = 0.6
-    dog_weight: float = 0.8
-
-
-@dataclass(slots=True)
-class LocalSuppressionConfig:
-    blur_kernel_size: int = 31
-    source: Literal["value", "blue", "max_blue_value"] = "max_blue_value"
-
-
-@dataclass(slots=True)
-class EvidenceFusionConfig:
-    blue_weight: float = 0.50
-    blob_weight: float = 0.70
-    suppression_weight: float = 0.30
-    gamma: float = 0.5
-
-
-@dataclass(slots=True)
-class ThresholdConfig:
-    method: ThresholdMethod = "hysteresis"
-    otsu_scale: float = 1.0
-    percentile: float = 95.0
-    adaptive_block_size: int = 31
-    adaptive_c: float = -4.0
-    positive_floor_percentile: float = 85.0
-    positive_floor_value: int = 8
-    hysteresis_low_scale: float = 0.87
-    hysteresis_high_scale: float = 1.05
-    pre_blur_kernel_size: int = 1
-
-
-@dataclass(slots=True)
-class MorphologyConfig:
-    opening_kernel_size: int = 1
-    closing_kernel_size: int = 0
-    fill_holes: bool = True
-    min_hole_area_px: int = 12
-
-
-@dataclass(slots=True)
-class RegionFilterConfig:
-    min_area_px: int = 8
-    max_area_px: int | None = 2000
-    min_width_px: int = 2
-    min_height_px: int = 2
-    max_aspect_ratio: float = 3.5
-    min_solidity: float = 0.57
-    min_convexity: float = 0.85
-    min_circularity: float = 0.32
-    max_eccentricity: float = 0.95
-    exclude_border_touching: bool = False
-
-
-@dataclass(slots=True)
-class SplitConfig:
-    enabled: bool = False
-    distance_threshold_ratio: float = 0.45
-    min_distance_px: int = 2
-
-
-@dataclass(slots=True)
-class SegmentationConfig:
-    preprocessing: PreprocessingConfig = field(default_factory=PreprocessingConfig)
-    blue_dominance: BlueDominanceConfig = field(default_factory=BlueDominanceConfig)
-    blob_enhancement: BlobEnhancementConfig = field(default_factory=BlobEnhancementConfig)
-    local_suppression: LocalSuppressionConfig = field(default_factory=LocalSuppressionConfig)
-    fusion: EvidenceFusionConfig = field(default_factory=EvidenceFusionConfig)
-    threshold: ThresholdConfig = field(default_factory=ThresholdConfig)
-    morphology: MorphologyConfig = field(default_factory=MorphologyConfig)
-    region_filter: RegionFilterConfig = field(default_factory=RegionFilterConfig)
-    split: SplitConfig = field(default_factory=SplitConfig)
+from src.config import (
+    BlobEnhancementConfig,
+    BlueDominanceConfig,
+    EvidenceFusionConfig,
+    LocalSuppressionConfig,
+    MorphologyConfig,
+    PreprocessingConfig,
+    RegionFilterConfig,
+    SegmentationConfig,
+    SplitConfig,
+    ThresholdConfig,
+)
 
 
 @dataclass(slots=True)

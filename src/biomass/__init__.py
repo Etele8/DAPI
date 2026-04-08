@@ -1,6 +1,6 @@
 from src.biomass.calibration import Calibration
+from src.config import BiomassConfig
 from src.biomass.volume_pipeline import (
-    BiomassConfig,
     BiomassDebugFiles,
     BiomassObjectMeasurement,
     BiomassPipelineResult,
