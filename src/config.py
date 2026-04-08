@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from pathlib import Path
+import tomllib
 from typing import Literal
 
 
 ThresholdMethod = Literal["otsu", "otsu_positive", "percentile", "percentile_positive", "adaptive", "hysteresis"]
+DEFAULT_PROFILE_NAME = "default"
 
 
 @dataclass(slots=True)
@@ -143,6 +145,8 @@ class AppConfig:
     prefer_blue: bool = True
     segmentation: SegmentationConfig = field(default_factory=lambda: default_segmentation_config())
     biomass: BiomassConfig = field(default_factory=lambda: default_biomass_config())
+    profile_name: str = DEFAULT_PROFILE_NAME
+    profile_path: Path | None = None
 
 
 def _resolve_data_root(path_like: str | Path) -> Path:
@@ -157,6 +161,66 @@ def _resolve_data_root(path_like: str | Path) -> Path:
             return candidate
 
     return path
+
+
+def _profile_dir() -> Path:
+    return Path(__file__).resolve().parent / "profiles"
+
+
+def available_profiles() -> list[str]:
+    profile_dir = _profile_dir()
+    if not profile_dir.exists():
+        return []
+    return sorted(path.stem for path in profile_dir.glob("*.toml"))
+
+
+def _merge_dataclass_config(base: object, overrides: dict[str, object], *, path: str) -> object:
+    if not is_dataclass(base):
+        raise TypeError(f"Expected dataclass instance at {path}")
+
+    field_map = {item.name: item for item in fields(base)}
+    unknown = sorted(set(overrides) - set(field_map))
+    if unknown:
+        joined = ", ".join(unknown)
+        raise ValueError(f"Unknown config keys at {path}: {joined}")
+
+    values: dict[str, object] = {}
+    for name in field_map:
+        current = getattr(base, name)
+        if name not in overrides:
+            values[name] = current
+            continue
+
+        override = overrides[name]
+        if is_dataclass(current):
+            if not isinstance(override, dict):
+                raise ValueError(f"Expected table for {path}.{name}")
+            values[name] = _merge_dataclass_config(current, override, path=f"{path}.{name}")
+        else:
+            values[name] = override
+
+    return type(base)(**values)
+
+
+def _load_profile_data(*, profile_name: str = DEFAULT_PROFILE_NAME, profile_path: str | Path | None = None) -> tuple[dict[str, object], Path]:
+    resolved_profile_path: Path
+    if profile_path is not None:
+        resolved_profile_path = _resolve_data_root(profile_path)
+    else:
+        resolved_profile_path = _profile_dir() / f"{profile_name}.toml"
+
+    if not resolved_profile_path.exists():
+        if profile_path is not None:
+            raise FileNotFoundError(f"Profile file does not exist: {resolved_profile_path}")
+        available = ", ".join(available_profiles()) or "(none)"
+        raise FileNotFoundError(f"Profile '{profile_name}' was not found. Available profiles: {available}")
+
+    with resolved_profile_path.open("rb") as handle:
+        data = tomllib.load(handle)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Profile must decode to a TOML table: {resolved_profile_path}")
+    return data, resolved_profile_path
 
 
 def default_segmentation_config() -> SegmentationConfig:
@@ -241,6 +305,49 @@ def default_biomass_config() -> BiomassConfig:
     )
 
 
+def apply_profile(
+    config: AppConfig,
+    *,
+    profile_name: str = DEFAULT_PROFILE_NAME,
+    profile_path: str | Path | None = None,
+) -> AppConfig:
+    data, resolved_profile_path = _load_profile_data(profile_name=profile_name, profile_path=profile_path)
+    allowed_top_level = {"app", "segmentation", "biomass"}
+    unknown_top_level = sorted(set(data) - allowed_top_level)
+    if unknown_top_level:
+        joined = ", ".join(unknown_top_level)
+        raise ValueError(f"Unknown top-level profile sections: {joined}")
+
+    app_data = data.get("app", {})
+    segmentation_data = data.get("segmentation", {})
+    biomass_data = data.get("biomass", {})
+    if not isinstance(app_data, dict):
+        raise ValueError("Profile section 'app' must be a TOML table")
+    if not isinstance(segmentation_data, dict):
+        raise ValueError("Profile section 'segmentation' must be a TOML table")
+    if not isinstance(biomass_data, dict):
+        raise ValueError("Profile section 'biomass' must be a TOML table")
+
+    allowed_app_keys = {"prefer_blue"}
+    unknown_app_keys = sorted(set(app_data) - allowed_app_keys)
+    if unknown_app_keys:
+        joined = ", ".join(unknown_app_keys)
+        raise ValueError(f"Unknown app config keys: {joined}")
+
+    segmentation = _merge_dataclass_config(config.segmentation, segmentation_data, path="segmentation")
+    biomass = _merge_dataclass_config(config.biomass, biomass_data, path="biomass")
+    prefer_blue = bool(app_data.get("prefer_blue", config.prefer_blue))
+    profile_label = resolved_profile_path.stem if profile_path is None else resolved_profile_path.name
+    return AppConfig(
+        discovery=config.discovery,
+        prefer_blue=prefer_blue,
+        segmentation=segmentation,
+        biomass=biomass,
+        profile_name=profile_label,
+        profile_path=resolved_profile_path,
+    )
+
+
 def apply_cli_overrides(config: AppConfig, *, microns_per_pixel: float | None = None) -> AppConfig:
     biomass = config.biomass if microns_per_pixel is None else replace(config.biomass, microns_per_pixel=microns_per_pixel)
     return AppConfig(
@@ -248,9 +355,17 @@ def apply_cli_overrides(config: AppConfig, *, microns_per_pixel: float | None = 
         prefer_blue=config.prefer_blue,
         segmentation=config.segmentation,
         biomass=biomass,
+        profile_name=config.profile_name,
+        profile_path=config.profile_path,
     )
 
 
-def default_config(data_roots: list[str | Path]) -> AppConfig:
+def default_config(
+    data_roots: list[str | Path],
+    *,
+    profile_name: str = DEFAULT_PROFILE_NAME,
+    profile_path: str | Path | None = None,
+) -> AppConfig:
     roots = [_resolve_data_root(p) for p in data_roots]
-    return AppConfig(discovery=DiscoveryConfig(root_dirs=roots))
+    config = AppConfig(discovery=DiscoveryConfig(root_dirs=roots))
+    return apply_profile(config, profile_name=profile_name, profile_path=profile_path)

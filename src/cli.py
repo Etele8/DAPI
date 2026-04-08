@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from src.config import apply_cli_overrides, default_config
+from src.config import apply_cli_overrides, available_profiles, default_config
 from src.io.discover import discover_samples
 from src.io.loader import load_sample
 from src.pipeline import run_segmentation_for_sample
@@ -38,6 +38,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Process only the first N discovered samples after filtering.",
     )
     parser.add_argument(
+        "--profile",
+        default="default",
+        help="Bundled parameter profile name to load from src/profiles, for example default.",
+    )
+    parser.add_argument(
+        "--profile-file",
+        default=None,
+        help="Path to a custom TOML profile file. Overrides --profile when provided.",
+    )
+    parser.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="Print bundled profile names and exit.",
+    )
+    parser.add_argument(
         "--microns-per-pixel",
         type=float,
         default=None,
@@ -69,8 +84,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.list_profiles:
+        for name in available_profiles():
+            print(name)
+        return 0
+
     data_roots = args.data_roots or ["data/samples"]
-    cfg = apply_cli_overrides(default_config(data_roots), microns_per_pixel=args.microns_per_pixel)
+    cfg = apply_cli_overrides(
+        default_config(data_roots, profile_name=args.profile, profile_path=args.profile_file),
+        microns_per_pixel=args.microns_per_pixel,
+    )
     discovered = discover_samples(cfg.discovery)
     discovered_by_stem = {sample.stem: sample for sample in discovered}
     selected_stems = _select_samples(args.sample, args.limit, [sample.stem for sample in discovered])

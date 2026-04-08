@@ -1,0 +1,75 @@
+[app]
+prefer_blue = true
+
+[segmentation.preprocessing]
+use_median_blur = true
+median_kernel_size = 3
+
+[segmentation.blue_dominance]
+blue_green_weight = 0.6
+blue_red_weight = 0.5
+blue_channel_weight = 0.25
+local_suppression_kernel_size = 35
+local_suppression_strength = 0.95
+
+[segmentation.blob_enhancement]
+source = "max_blue_value"
+top_hat_kernel_size = 11
+dog_sigma_small = 0.7
+dog_sigma_large = 3.0
+top_hat_weight = 0.6
+dog_weight = 0.8
+
+[segmentation.local_suppression]
+blur_kernel_size = 31
+source = "max_blue_value"
+
+[segmentation.fusion]
+blue_weight = 0.50
+blob_weight = 0.70
+suppression_weight = 0.30
+gamma = 0.5
+
+[segmentation.threshold]
+method = "hysteresis"
+otsu_scale = 1.0
+percentile = 95.0
+adaptive_block_size = 31
+adaptive_c = -4.0
+positive_floor_percentile = 85.0
+positive_floor_value = 8
+hysteresis_low_scale = 0.87
+hysteresis_high_scale = 1.05
+pre_blur_kernel_size = 1
+
+[segmentation.morphology]
+opening_kernel_size = 1
+closing_kernel_size = 0
+fill_holes = true
+min_hole_area_px = 12
+
+[segmentation.region_filter]
+min_area_px = 8
+max_area_px = 2000
+min_width_px = 2
+min_height_px = 2
+max_aspect_ratio = 3.5
+min_solidity = 0.57
+min_convexity = 0.85
+min_circularity = 0.32
+max_eccentricity = 0.95
+exclude_border_touching = false
+
+[segmentation.split]
+enabled = false
+distance_threshold_ratio = 0.45
+min_distance_px = 2
+
+[biomass]
+min_area_px2 = 12.0
+smoothing_points = 64
+smoothing_window = 7
+min_slice_length_px = 0.75
+zeder_max_depth = 8
+zeder_width_linearity_tol_px = 0.40
+max_debug_panels = 24

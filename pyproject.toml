@@ -18,3 +18,6 @@ dapi-segment = "src.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src", "src.*"]
+
+[tool.setuptools.package-data]
+"src.profiles" = ["*.toml"]
