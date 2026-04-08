@@ -7,7 +7,12 @@ from src.biomass import (
     Calibration,
     run_biomass_stage,
 )
+from src.classifier_dataset import ingest_annotation_manifest, prepare_classifier_dataset
+from src.crop_export import CropExportResult, CropRecord, export_candidate_crops
+from src.local_refinement import RefinedCropRecord, refine_positive_crops
 from src.pipeline import PipelineOutput, build_artifact_mask, run_segmentation_for_sample
+from src.pipeline import ProposalPipelineOutput, RefinementPipelineOutput, run_proposal_pipeline_for_sample, run_refinement_from_manifest
+from src.proposal_generation import ProposalCandidate, ProposalGenerationResult, generate_proposals
 from src.segmentation.segment import (
     BlobEnhancementConfig,
     BlueDominanceConfig,
@@ -35,11 +40,18 @@ __all__ = [
     "BiomassSummary",
     "BlueDominanceConfig",
     "Calibration",
+    "CropExportResult",
+    "CropRecord",
     "EvidenceFusionConfig",
     "LocalSuppressionConfig",
     "MorphologyConfig",
     "PipelineOutput",
     "PreprocessingConfig",
+    "ProposalCandidate",
+    "ProposalGenerationResult",
+    "ProposalPipelineOutput",
+    "RefinedCropRecord",
+    "RefinementPipelineOutput",
     "RegionDetection",
     "RegionFilterConfig",
     "SegmentationConfig",
@@ -47,7 +59,14 @@ __all__ = [
     "SplitConfig",
     "ThresholdConfig",
     "build_artifact_mask",
+    "export_candidate_crops",
+    "generate_proposals",
+    "ingest_annotation_manifest",
+    "prepare_classifier_dataset",
+    "refine_positive_crops",
     "run_biomass_stage",
+    "run_proposal_pipeline_for_sample",
+    "run_refinement_from_manifest",
     "run_segmentation_for_sample",
     "save_debug_outputs",
     "segment_cells",

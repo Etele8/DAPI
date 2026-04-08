@@ -523,38 +523,67 @@ def filter_regions(
 ) -> tuple[np.ndarray, list[RegionDetection]]:
     filtered_mask = np.zeros(labels.shape, dtype=np.uint8)
     regions: list[RegionDetection] = []
-    height, width = labels.shape
-    artifact_mask_bool = artifact_mask.astype(bool) if artifact_mask is not None else None
 
     for label_id, component_mask, contour in components:
-        x, y, w, h = cv2.boundingRect(contour)
-        area_px = int(cv2.countNonZero(component_mask))
-        moments = cv2.moments(contour)
-        if moments["m00"] == 0:
-            centroid_xy = (x + w / 2.0, y + h / 2.0)
-        else:
-            centroid_xy = (
-                float(moments["m10"] / moments["m00"]),
-                float(moments["m01"] / moments["m00"]),
-            )
+        region = measure_region(
+            label_id,
+            component_mask,
+            contour,
+            labels.shape,
+            artifact_mask=artifact_mask,
+            config=config,
+        )
+        accepted = region.accepted
+        if accepted:
+            filtered_mask[labels == label_id] = 255
 
-        hull = cv2.convexHull(contour)
-        contour_area = float(cv2.contourArea(contour))
-        hull_area = float(cv2.contourArea(hull))
-        perimeter = float(cv2.arcLength(contour, True))
-        hull_perimeter = float(cv2.arcLength(hull, True))
+        regions.append(region)
 
-        aspect_ratio = float(max(w, h) / max(min(w, h), 1))
-        solidity = float(contour_area / hull_area) if hull_area > 0 else 0.0
-        convexity = float(hull_perimeter / perimeter) if perimeter > 0 else 0.0
-        circularity = float((4.0 * np.pi * contour_area) / (perimeter * perimeter)) if perimeter > 0 else 0.0
-        eccentricity = _compute_eccentricity(contour)
-        touches_border = x == 0 or y == 0 or (x + w) >= width or (y + h) >= height
-        touches_artifact_mask = bool(
-            artifact_mask_bool is not None and np.any(component_mask.astype(bool) & artifact_mask_bool)
+    _, relabeled, _, _ = cv2.connectedComponentsWithStats(filtered_mask, connectivity=8)
+    return relabeled.astype(np.int32), regions
+
+
+def measure_region(
+    label_id: int,
+    component_mask: np.ndarray,
+    contour: np.ndarray,
+    image_shape: tuple[int, int],
+    *,
+    artifact_mask: np.ndarray | None = None,
+    config: RegionFilterConfig | None = None,
+) -> RegionDetection:
+    height, width = image_shape
+    artifact_mask_bool = artifact_mask.astype(bool) if artifact_mask is not None else None
+
+    x, y, w, h = cv2.boundingRect(contour)
+    area_px = int(cv2.countNonZero(component_mask))
+    moments = cv2.moments(contour)
+    if moments["m00"] == 0:
+        centroid_xy = (x + w / 2.0, y + h / 2.0)
+    else:
+        centroid_xy = (
+            float(moments["m10"] / moments["m00"]),
+            float(moments["m01"] / moments["m00"]),
         )
 
-        rejection_reasons: list[str] = []
+    hull = cv2.convexHull(contour)
+    contour_area = float(cv2.contourArea(contour))
+    hull_area = float(cv2.contourArea(hull))
+    perimeter = float(cv2.arcLength(contour, True))
+    hull_perimeter = float(cv2.arcLength(hull, True))
+
+    aspect_ratio = float(max(w, h) / max(min(w, h), 1))
+    solidity = float(contour_area / hull_area) if hull_area > 0 else 0.0
+    convexity = float(hull_perimeter / perimeter) if perimeter > 0 else 0.0
+    circularity = float((4.0 * np.pi * contour_area) / (perimeter * perimeter)) if perimeter > 0 else 0.0
+    eccentricity = _compute_eccentricity(contour)
+    touches_border = x == 0 or y == 0 or (x + w) >= width or (y + h) >= height
+    touches_artifact_mask = bool(
+        artifact_mask_bool is not None and np.any(component_mask.astype(bool) & artifact_mask_bool)
+    )
+
+    rejection_reasons: list[str] = []
+    if config is not None:
         if area_px < config.min_area_px:
             rejection_reasons.append("area_too_small")
         if config.max_area_px is not None and area_px > config.max_area_px:
@@ -575,35 +604,26 @@ def filter_regions(
             rejection_reasons.append("eccentricity_too_high")
         if config.exclude_border_touching and touches_border:
             rejection_reasons.append("touches_border")
-        if touches_artifact_mask:
-            rejection_reasons.append("touches_artifact_mask")
+    if touches_artifact_mask:
+        rejection_reasons.append("touches_artifact_mask")
 
-        accepted = not rejection_reasons
-        if accepted:
-            filtered_mask[labels == label_id] = 255
-
-        regions.append(
-            RegionDetection(
-                label_id=label_id,
-                area_px=area_px,
-                bbox=(x, y, w, h),
-                centroid_xy=centroid_xy,
-                width_px=w,
-                height_px=h,
-                aspect_ratio=aspect_ratio,
-                solidity=solidity,
-                convexity=convexity,
-                circularity=circularity,
-                eccentricity=eccentricity,
-                touches_border=touches_border,
-                touches_artifact_mask=touches_artifact_mask,
-                accepted=accepted,
-                rejection_reasons=rejection_reasons,
-            )
-        )
-
-    _, relabeled, _, _ = cv2.connectedComponentsWithStats(filtered_mask, connectivity=8)
-    return relabeled.astype(np.int32), regions
+    return RegionDetection(
+        label_id=label_id,
+        area_px=area_px,
+        bbox=(x, y, w, h),
+        centroid_xy=centroid_xy,
+        width_px=w,
+        height_px=h,
+        aspect_ratio=aspect_ratio,
+        solidity=solidity,
+        convexity=convexity,
+        circularity=circularity,
+        eccentricity=eccentricity,
+        touches_border=touches_border,
+        touches_artifact_mask=touches_artifact_mask,
+        accepted=not rejection_reasons,
+        rejection_reasons=rejection_reasons,
+    )
 
 
 def segment_cells(

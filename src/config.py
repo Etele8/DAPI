@@ -118,6 +118,79 @@ class BiomassConfig:
 
 
 @dataclass(slots=True)
+class ProposalFilterConfig:
+    min_area_px: int = 4
+    max_area_px: int | None = None
+    keep_border_touching: bool = True
+    small_area_warn_px: int = 8
+    large_area_warn_px: int = 2500
+    merged_aspect_ratio_warn: float = 4.5
+    merged_eccentricity_warn: float = 0.98
+    merged_solidity_warn: float = 0.5
+
+
+@dataclass(slots=True)
+class CropExportConfig:
+    enabled: bool = True
+    padding_px: int = 16
+    min_crop_size_px: int = 48
+    force_square: bool = True
+    clamp_to_image: bool = True
+    export_images: bool = True
+    export_overlays: bool = True
+    export_masks: bool = True
+    images_subdir: str = "crops/images"
+    overlays_subdir: str = "crops/overlays"
+    masks_subdir: str = "crops/masks"
+    metadata_csv_name: str = "crop_metadata.csv"
+    metadata_jsonl_name: str = "crop_metadata.jsonl"
+
+
+@dataclass(slots=True)
+class AnnotationExportConfig:
+    manifest_subdir: str = "annotation"
+    manifest_name: str = "annotation_manifest.csv"
+    label_options: tuple[str, ...] = ("single_valid", "invalid", "merged", "uncertain")
+    include_helper_columns: bool = True
+
+
+@dataclass(slots=True)
+class ClassifierDatasetConfig:
+    positive_labels: tuple[str, ...] = ("single_valid",)
+    negative_labels: tuple[str, ...] = ("invalid", "merged")
+    excluded_labels: tuple[str, ...] = ("uncertain",)
+    train_fraction: float = 0.7
+    val_fraction: float = 0.15
+    test_fraction: float = 0.15
+    split_seed: int = 13
+    allow_image_leakage: bool = False
+    split_subdir: str = "classifier_dataset"
+
+
+@dataclass(slots=True)
+class LocalRefinementConfig:
+    enabled: bool = True
+    segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
+    center_distance_weight: float = 1.0
+    refined_masks_subdir: str = "refined/masks"
+    refined_overlays_subdir: str = "refined/overlays"
+    refined_metadata_name: str = "refined_crops.csv"
+    biomass_subdir: str = "refined/biomass"
+
+
+@dataclass(slots=True)
+class ProposalWorkflowConfig:
+    filter: ProposalFilterConfig = field(default_factory=ProposalFilterConfig)
+    crop_export: CropExportConfig = field(default_factory=CropExportConfig)
+    annotation: AnnotationExportConfig = field(default_factory=AnnotationExportConfig)
+    dataset: ClassifierDatasetConfig = field(default_factory=ClassifierDatasetConfig)
+    refinement: LocalRefinementConfig = field(default_factory=LocalRefinementConfig)
+    candidates_csv_name: str = "proposal_candidates.csv"
+    candidates_jsonl_name: str = "proposal_candidates.jsonl"
+    debug_subdir_name: str = "proposal_debug"
+
+
+@dataclass(slots=True)
 class DiscoveryConfig:
     root_dirs: list[Path]
     blue_exts: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
@@ -145,6 +218,7 @@ class AppConfig:
     prefer_blue: bool = True
     segmentation: SegmentationConfig = field(default_factory=lambda: default_segmentation_config())
     biomass: BiomassConfig = field(default_factory=lambda: default_biomass_config())
+    proposal: ProposalWorkflowConfig = field(default_factory=lambda: default_proposal_config())
     profile_name: str = DEFAULT_PROFILE_NAME
     profile_path: Path | None = None
 
@@ -305,6 +379,96 @@ def default_biomass_config() -> BiomassConfig:
     )
 
 
+def default_proposal_config() -> ProposalWorkflowConfig:
+    return ProposalWorkflowConfig(
+        filter=ProposalFilterConfig(
+            min_area_px=4,
+            max_area_px=None,
+            keep_border_touching=True,
+            small_area_warn_px=8,
+            large_area_warn_px=2500,
+            merged_aspect_ratio_warn=4.5,
+            merged_eccentricity_warn=0.98,
+            merged_solidity_warn=0.5,
+        ),
+        crop_export=CropExportConfig(
+            enabled=True,
+            padding_px=16,
+            min_crop_size_px=48,
+            force_square=True,
+            clamp_to_image=True,
+            export_images=True,
+            export_overlays=True,
+            export_masks=True,
+            images_subdir="crops/images",
+            overlays_subdir="crops/overlays",
+            masks_subdir="crops/masks",
+            metadata_csv_name="crop_metadata.csv",
+            metadata_jsonl_name="crop_metadata.jsonl",
+        ),
+        annotation=AnnotationExportConfig(
+            manifest_subdir="annotation",
+            manifest_name="annotation_manifest.csv",
+            label_options=("single_valid", "invalid", "merged", "uncertain"),
+            include_helper_columns=True,
+        ),
+        dataset=ClassifierDatasetConfig(
+            positive_labels=("single_valid",),
+            negative_labels=("invalid", "merged"),
+            excluded_labels=("uncertain",),
+            train_fraction=0.7,
+            val_fraction=0.15,
+            test_fraction=0.15,
+            split_seed=13,
+            allow_image_leakage=False,
+            split_subdir="classifier_dataset",
+        ),
+        refinement=LocalRefinementConfig(
+            enabled=True,
+            segmentation=SegmentationConfig(
+                threshold=ThresholdConfig(
+                    method="hysteresis",
+                    otsu_scale=0.95,
+                    percentile=92.0,
+                    adaptive_block_size=31,
+                    adaptive_c=-3.0,
+                    positive_floor_percentile=70.0,
+                    positive_floor_value=6,
+                    hysteresis_low_scale=0.82,
+                    hysteresis_high_scale=1.0,
+                    pre_blur_kernel_size=1,
+                ),
+                morphology=MorphologyConfig(
+                    opening_kernel_size=1,
+                    closing_kernel_size=3,
+                    fill_holes=True,
+                    min_hole_area_px=18,
+                ),
+                region_filter=RegionFilterConfig(
+                    min_area_px=8,
+                    max_area_px=None,
+                    min_width_px=2,
+                    min_height_px=2,
+                    max_aspect_ratio=8.0,
+                    min_solidity=0.2,
+                    min_convexity=0.2,
+                    min_circularity=0.05,
+                    max_eccentricity=0.995,
+                    exclude_border_touching=False,
+                ),
+            ),
+            center_distance_weight=1.0,
+            refined_masks_subdir="refined/masks",
+            refined_overlays_subdir="refined/overlays",
+            refined_metadata_name="refined_crops.csv",
+            biomass_subdir="refined/biomass",
+        ),
+        candidates_csv_name="proposal_candidates.csv",
+        candidates_jsonl_name="proposal_candidates.jsonl",
+        debug_subdir_name="proposal_debug",
+    )
+
+
 def apply_profile(
     config: AppConfig,
     *,
@@ -312,7 +476,7 @@ def apply_profile(
     profile_path: str | Path | None = None,
 ) -> AppConfig:
     data, resolved_profile_path = _load_profile_data(profile_name=profile_name, profile_path=profile_path)
-    allowed_top_level = {"app", "segmentation", "biomass"}
+    allowed_top_level = {"app", "segmentation", "biomass", "proposal"}
     unknown_top_level = sorted(set(data) - allowed_top_level)
     if unknown_top_level:
         joined = ", ".join(unknown_top_level)
@@ -321,12 +485,15 @@ def apply_profile(
     app_data = data.get("app", {})
     segmentation_data = data.get("segmentation", {})
     biomass_data = data.get("biomass", {})
+    proposal_data = data.get("proposal", {})
     if not isinstance(app_data, dict):
         raise ValueError("Profile section 'app' must be a TOML table")
     if not isinstance(segmentation_data, dict):
         raise ValueError("Profile section 'segmentation' must be a TOML table")
     if not isinstance(biomass_data, dict):
         raise ValueError("Profile section 'biomass' must be a TOML table")
+    if not isinstance(proposal_data, dict):
+        raise ValueError("Profile section 'proposal' must be a TOML table")
 
     allowed_app_keys = {"prefer_blue"}
     unknown_app_keys = sorted(set(app_data) - allowed_app_keys)
@@ -336,6 +503,7 @@ def apply_profile(
 
     segmentation = _merge_dataclass_config(config.segmentation, segmentation_data, path="segmentation")
     biomass = _merge_dataclass_config(config.biomass, biomass_data, path="biomass")
+    proposal = _merge_dataclass_config(config.proposal, proposal_data, path="proposal")
     prefer_blue = bool(app_data.get("prefer_blue", config.prefer_blue))
     profile_label = resolved_profile_path.stem if profile_path is None else resolved_profile_path.name
     return AppConfig(
@@ -343,6 +511,7 @@ def apply_profile(
         prefer_blue=prefer_blue,
         segmentation=segmentation,
         biomass=biomass,
+        proposal=proposal,
         profile_name=profile_label,
         profile_path=resolved_profile_path,
     )
@@ -355,6 +524,7 @@ def apply_cli_overrides(config: AppConfig, *, microns_per_pixel: float | None = 
         prefer_blue=config.prefer_blue,
         segmentation=config.segmentation,
         biomass=biomass,
+        proposal=config.proposal,
         profile_name=config.profile_name,
         profile_path=config.profile_path,
     )

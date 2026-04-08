@@ -1,0 +1,155 @@
+[app]
+prefer_blue = true
+
+[segmentation.preprocessing]
+use_median_blur = true
+median_kernel_size = 3
+
+[segmentation.blue_dominance]
+blue_green_weight = 0.55
+blue_red_weight = 0.45
+blue_channel_weight = 0.30
+local_suppression_kernel_size = 31
+local_suppression_strength = 0.88
+
+[segmentation.blob_enhancement]
+source = "max_blue_value"
+top_hat_kernel_size = 9
+dog_sigma_small = 0.6
+dog_sigma_large = 2.4
+top_hat_weight = 0.7
+dog_weight = 0.9
+
+[segmentation.local_suppression]
+blur_kernel_size = 25
+source = "max_blue_value"
+
+[segmentation.fusion]
+blue_weight = 0.45
+blob_weight = 0.85
+suppression_weight = 0.20
+gamma = 0.8
+
+[segmentation.threshold]
+method = "hysteresis"
+otsu_scale = 0.9
+percentile = 90.0
+adaptive_block_size = 31
+adaptive_c = -2.0
+positive_floor_percentile = 65.0
+positive_floor_value = 5
+hysteresis_low_scale = 0.72
+hysteresis_high_scale = 0.92
+pre_blur_kernel_size = 1
+
+[segmentation.morphology]
+opening_kernel_size = 1
+closing_kernel_size = 3
+fill_holes = true
+min_hole_area_px = 8
+
+[segmentation.region_filter]
+min_area_px = 4
+max_area_px = 6000
+min_width_px = 1
+min_height_px = 1
+max_aspect_ratio = 12.0
+min_solidity = 0.05
+min_convexity = 0.05
+min_circularity = 0.01
+max_eccentricity = 0.999
+exclude_border_touching = false
+
+[segmentation.split]
+enabled = false
+distance_threshold_ratio = 0.45
+min_distance_px = 2
+
+[proposal.filter]
+min_area_px = 4
+max_area_px = 6000
+keep_border_touching = true
+small_area_warn_px = 8
+large_area_warn_px = 2500
+merged_aspect_ratio_warn = 4.5
+merged_eccentricity_warn = 0.98
+merged_solidity_warn = 0.5
+
+[proposal.crop_export]
+enabled = true
+padding_px = 18
+min_crop_size_px = 56
+force_square = true
+clamp_to_image = true
+export_images = true
+export_overlays = true
+export_masks = true
+images_subdir = "crops/images"
+overlays_subdir = "crops/overlays"
+masks_subdir = "crops/masks"
+metadata_csv_name = "crop_metadata.csv"
+metadata_jsonl_name = "crop_metadata.jsonl"
+
+[proposal.annotation]
+manifest_subdir = "annotation"
+manifest_name = "annotation_manifest.csv"
+label_options = ["single_valid", "invalid", "merged", "uncertain"]
+include_helper_columns = true
+
+[proposal.dataset]
+positive_labels = ["single_valid"]
+negative_labels = ["invalid", "merged"]
+excluded_labels = ["uncertain"]
+train_fraction = 0.70
+val_fraction = 0.15
+test_fraction = 0.15
+split_seed = 13
+allow_image_leakage = false
+split_subdir = "classifier_dataset"
+
+[proposal.refinement]
+enabled = true
+center_distance_weight = 1.0
+refined_masks_subdir = "refined/masks"
+refined_overlays_subdir = "refined/overlays"
+refined_metadata_name = "refined_crops.csv"
+biomass_subdir = "refined/biomass"
+
+[proposal.refinement.segmentation.threshold]
+method = "hysteresis"
+otsu_scale = 0.95
+percentile = 92.0
+adaptive_block_size = 31
+adaptive_c = -3.0
+positive_floor_percentile = 70.0
+positive_floor_value = 6
+hysteresis_low_scale = 0.82
+hysteresis_high_scale = 1.0
+pre_blur_kernel_size = 1
+
+[proposal.refinement.segmentation.morphology]
+opening_kernel_size = 1
+closing_kernel_size = 3
+fill_holes = true
+min_hole_area_px = 18
+
+[proposal.refinement.segmentation.region_filter]
+min_area_px = 8
+max_area_px = 6000
+min_width_px = 2
+min_height_px = 2
+max_aspect_ratio = 8.0
+min_solidity = 0.2
+min_convexity = 0.2
+min_circularity = 0.05
+max_eccentricity = 0.995
+exclude_border_touching = false
+
+[biomass]
+min_area_px2 = 12.0
+smoothing_points = 64
+smoothing_window = 7
+min_slice_length_px = 0.75
+zeder_max_depth = 8
+zeder_width_linearity_tol_px = 0.40
+max_debug_panels = 24

@@ -4,16 +4,27 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from src.classifier_dataset import prepare_classifier_dataset
 from src.config import apply_cli_overrides, available_profiles, default_config
 from src.io.discover import discover_samples
 from src.io.loader import load_sample
-from src.pipeline import run_segmentation_for_sample
+from src.pipeline import (
+    run_proposal_pipeline_for_sample,
+    run_refinement_from_manifest,
+    run_segmentation_for_sample,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dapi-segment",
-        description="Run the evidence-based DAPI cell segmentation pipeline.",
+        description="Run the evidence-based DAPI segmentation, proposal, and refinement workflows.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("segment", "proposals", "prepare-dataset", "refine"),
+        default="segment",
+        help="Pipeline mode to run.",
     )
     parser.add_argument(
         "--data-root",
@@ -29,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         default="outputs",
-        help="Directory where per-sample debug folders are written.",
+        help="Directory where pipeline outputs are written.",
     )
     parser.add_argument(
         "--limit",
@@ -40,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile",
         default="default",
-        help="Bundled parameter profile name to load from src/profiles, for example default.",
+        help="Bundled parameter profile name to load from src/profiles.",
     )
     parser.add_argument(
         "--profile-file",
@@ -56,7 +67,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--microns-per-pixel",
         type=float,
         default=None,
-        help="Microscope calibration for biomass conversion. If omitted, physical-unit columns are written as NaN and flagged.",
+        help="Microscope calibration for biomass conversion.",
+    )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Annotation manifest path used by prepare-dataset and refine modes.",
+    )
+    parser.add_argument(
+        "--run-biomass",
+        action="store_true",
+        help="When refining positive crops, also run biomass on the refined masks.",
     )
     return parser
 
@@ -80,6 +101,14 @@ def _select_samples(sample_stem: str | None, limit: int | None, stems: Sequence[
     return selected
 
 
+def _resolve_profile(mode: str, profile: str, profile_file: str | None) -> str:
+    if profile_file is not None:
+        return profile
+    if mode in {"proposals", "refine"} and profile == "default":
+        return "proposal_high_recall"
+    return profile
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -89,21 +118,49 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(name)
         return 0
 
+    profile_name = _resolve_profile(args.mode, args.profile, args.profile_file)
     data_roots = args.data_roots or ["data/samples"]
     cfg = apply_cli_overrides(
-        default_config(data_roots, profile_name=args.profile, profile_path=args.profile_file),
+        default_config(data_roots, profile_name=profile_name, profile_path=args.profile_file),
         microns_per_pixel=args.microns_per_pixel,
     )
-    discovered = discover_samples(cfg.discovery)
-    discovered_by_stem = {sample.stem: sample for sample in discovered}
-    selected_stems = _select_samples(args.sample, args.limit, [sample.stem for sample in discovered])
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.mode == "prepare-dataset":
+        if args.manifest is None:
+            raise SystemExit("--manifest is required for --mode prepare-dataset")
+        files = prepare_classifier_dataset(args.manifest, output_dir=output_dir, config=cfg.proposal.dataset)
+        print(f"prepared_dataset manifest={args.manifest} output={files['summary_json']}")
+        return 0
+
+    if args.mode == "refine":
+        if args.manifest is None:
+            raise SystemExit("--manifest is required for --mode refine")
+        result = run_refinement_from_manifest(args.manifest, output_dir, app_config=cfg, run_biomass=args.run_biomass)
+        print(
+            f"refined_crops={len(result.refined_records)} metadata={result.files['refined_metadata_csv']}"
+        )
+        return 0
+
+    discovered = discover_samples(cfg.discovery)
+    discovered_by_stem = {sample.stem: sample for sample in discovered}
+    selected_stems = _select_samples(args.sample, args.limit, [sample.stem for sample in discovered])
+
     for stem in selected_stems:
         sample = discovered_by_stem[stem]
         loaded = load_sample(sample)
+
+        if args.mode == "proposals":
+            result = run_proposal_pipeline_for_sample(loaded, output_dir, app_config=cfg)
+            export_count = 0 if result.crop_export is None else len(result.crop_export.records)
+            print(
+                f"{stem}: proposals={len(result.proposals.candidates)} exported_crops={export_count} "
+                f"annotation_manifest={result.annotation_files.get('annotation_manifest', 'n/a')}"
+            )
+            continue
+
         result = run_segmentation_for_sample(
             loaded,
             output_dir,
