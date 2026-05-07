@@ -177,12 +177,9 @@ class AnnotationReviewConfig:
     back_key: str = "b"
     toggle_view_key: str = "v"
     edit_mask_key: str = "m"
-    redraw_mask_key: str = "n"
     save_mask_key: str = "e"
     reset_mask_key: str = "r"
     undo_key: str = "z"
-    decrease_brush_key: str = "["
-    increase_brush_key: str = "]"
     quit_key: str = "q"
     positive_label: str = "single_valid"
     negative_label: str = "invalid"
@@ -470,12 +467,9 @@ def default_proposal_config() -> ProposalWorkflowConfig:
             back_key="b",
             toggle_view_key="v",
             edit_mask_key="m",
-            redraw_mask_key="n",
             save_mask_key="e",
             reset_mask_key="r",
             undo_key="z",
-            decrease_brush_key="[",
-            increase_brush_key="]",
             quit_key="q",
             positive_label="single_valid",
             negative_label="invalid",

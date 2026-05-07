@@ -65,8 +65,9 @@ class AnnotationRunResult:
 @dataclass(slots=True)
 class MaskEditState:
     active: bool = False
-    mode: str = "correct"
     brush_radius_px: int = 6
+    min_brush_radius_px: int = 1
+    max_brush_radius_px: int = 48
     current_mask: np.ndarray | None = None
     original_mask: np.ndarray | None = None
     undo_stack: list[np.ndarray] = field(default_factory=list)
@@ -79,12 +80,11 @@ class MaskEditState:
     image_shape_hw: tuple[int, int] = (0, 0)
     dirty: bool = False
 
-    def begin(self, *, base_mask: np.ndarray, mode: str, config: AnnotationReviewConfig) -> None:
+    def begin(self, *, base_mask: np.ndarray, config: AnnotationReviewConfig) -> None:
         self.active = True
-        self.mode = mode
         self.brush_radius_px = int(np.clip(self.brush_radius_px or config.initial_brush_radius_px, config.min_brush_radius_px, config.max_brush_radius_px))
         self.original_mask = base_mask.copy()
-        self.current_mask = np.zeros_like(base_mask) if mode == "redraw" else base_mask.copy()
+        self.current_mask = base_mask.copy()
         self.undo_stack = [self.current_mask.copy()]
         self.mouse_down = False
         self.last_canvas_xy = None
@@ -97,7 +97,7 @@ class MaskEditState:
     def reset(self) -> None:
         if self.original_mask is None:
             return
-        self.current_mask = np.zeros_like(self.original_mask) if self.mode == "redraw" else self.original_mask.copy()
+        self.current_mask = self.original_mask.copy()
         self.undo_stack = [self.current_mask.copy()]
         self.mouse_down = False
         self.last_canvas_xy = None
@@ -336,7 +336,7 @@ def _render_frame(
 
     display, scale = _fit_image(display_base, config)
     mode_text = (
-        f"edit={edit_state.mode} brush={edit_state.brush_radius_px}px dirty={edit_state.dirty}"
+        f"edit=mask brush={edit_state.brush_radius_px}px dirty={edit_state.dirty}"
         if edit_state.active
         else "edit=off"
     )
@@ -350,13 +350,11 @@ def _render_frame(
         f"[{config.skip_key.upper()}] skip  "
         f"[{config.back_key.upper()}] back  "
         f"[{config.toggle_view_key.upper()}] view",
-        f"[{config.edit_mask_key.upper()}] correct mask  "
-        f"[{config.redraw_mask_key.upper()}] redraw mask  "
+        f"[{config.edit_mask_key.upper()}] edit mask  "
         f"[{config.save_mask_key.upper()}] save mask  "
         f"[{config.reset_mask_key.upper()}] reset  "
         f"[{config.undo_key.upper()}] undo  "
-        f"[{config.decrease_brush_key}] smaller  "
-        f"[{config.increase_brush_key}] larger  "
+        f"[wheel] brush size  "
         f"[{config.quit_key.upper()}] quit",
     ]
 
@@ -415,7 +413,7 @@ def _save_mask_edit(
     _write_image(output_path, edit_state.current_mask)
     row["edited_mask_path"] = output_path.relative_to(_manifest_root(manifest_path)).as_posix()
     row["mask_was_edited"] = "true"
-    row["mask_edit_mode"] = edit_state.mode
+    row["mask_edit_mode"] = "edit"
     edit_state.dirty = False
     return True
 
@@ -436,8 +434,14 @@ def _mask_point_from_canvas(x: int, y: int, edit_state: MaskEditState) -> tuple[
 def _paint_line(edit_state: MaskEditState, start_xy: tuple[int, int], end_xy: tuple[int, int]) -> None:
     if edit_state.current_mask is None:
         return
-    cv2.line(edit_state.current_mask, start_xy, end_xy, int(edit_state.draw_value), thickness=max(edit_state.brush_radius_px * 2, 1), lineType=cv2.LINE_AA)
-    cv2.circle(edit_state.current_mask, end_xy, edit_state.brush_radius_px, int(edit_state.draw_value), thickness=-1, lineType=cv2.LINE_AA)
+    delta_x = end_xy[0] - start_xy[0]
+    delta_y = end_xy[1] - start_xy[1]
+    steps = max(abs(delta_x), abs(delta_y), 1)
+    for step in range(steps + 1):
+        alpha = step / float(steps)
+        px = int(round(start_xy[0] + alpha * delta_x))
+        py = int(round(start_xy[1] + alpha * delta_y))
+        cv2.circle(edit_state.current_mask, (px, py), edit_state.brush_radius_px, int(edit_state.draw_value), thickness=-1, lineType=cv2.LINE_AA)
     edit_state.current_mask = np.where(edit_state.current_mask > 0, 255, 0).astype(np.uint8)
     edit_state.dirty = True
 
@@ -459,6 +463,14 @@ def _annotation_mouse_callback(event: int, x: int, y: int, flags: int, userdata:
         int(round(point[1] * state.display_scale)),
     )
     state.pointer_display_xy = display_point
+
+    if event == cv2.EVENT_MOUSEWHEEL:
+        wheel_delta = cv2.getMouseWheelDelta(flags)
+        if wheel_delta > 0:
+            state.brush_radius_px = min(state.brush_radius_px + 1, state.max_brush_radius_px)
+        elif wheel_delta < 0:
+            state.brush_radius_px = max(state.brush_radius_px - 1, state.min_brush_radius_px)
+        return
 
     if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_RBUTTONDOWN:
         state.save_undo_snapshot()
@@ -506,7 +518,11 @@ def annotate_manifest(
     if config.fullscreen:
         cv2.setWindowProperty(config.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    edit_state = MaskEditState(brush_radius_px=config.initial_brush_radius_px)
+    edit_state = MaskEditState(
+        brush_radius_px=config.initial_brush_radius_px,
+        min_brush_radius_px=config.min_brush_radius_px,
+        max_brush_radius_px=config.max_brush_radius_px,
+    )
     cv2.setMouseCallback(config.window_name, _annotation_mouse_callback, edit_state)
 
     changed_labels = 0
@@ -566,19 +582,9 @@ def annotate_manifest(
                 if char == config.toggle_view_key.lower() and len(variants) > 1:
                     view_index = (view_index + 1) % len(variants)
                     continue
-                if char == config.decrease_brush_key.lower():
-                    edit_state.brush_radius_px = max(edit_state.brush_radius_px - 1, config.min_brush_radius_px)
-                    continue
-                if char == config.increase_brush_key.lower():
-                    edit_state.brush_radius_px = min(edit_state.brush_radius_px + 1, config.max_brush_radius_px)
-                    continue
                 if char == config.edit_mask_key.lower():
                     base_mask = loaded_mask if loaded_mask is not None else np.zeros(image.shape[:2], dtype=np.uint8)
-                    edit_state.begin(base_mask=base_mask, mode="correct", config=config)
-                    continue
-                if char == config.redraw_mask_key.lower():
-                    base_mask = loaded_mask if loaded_mask is not None else np.zeros(image.shape[:2], dtype=np.uint8)
-                    edit_state.begin(base_mask=base_mask, mode="redraw", config=config)
+                    edit_state.begin(base_mask=base_mask, config=config)
                     continue
                 if char == config.reset_mask_key.lower() and edit_state.active:
                     edit_state.reset()
