@@ -132,8 +132,8 @@ class ProposalFilterConfig:
 @dataclass(slots=True)
 class CropExportConfig:
     enabled: bool = True
-    padding_px: int = 16
-    min_crop_size_px: int = 48
+    padding_px: int = 24
+    min_crop_size_px: int = 72
     force_square: bool = True
     clamp_to_image: bool = True
     export_images: bool = True
@@ -418,8 +418,8 @@ def default_proposal_config() -> ProposalWorkflowConfig:
         ),
         crop_export=CropExportConfig(
             enabled=True,
-            padding_px=16,
-            min_crop_size_px=48,
+            padding_px=24,
+            min_crop_size_px=72,
             force_square=True,
             clamp_to_image=True,
             export_images=True,

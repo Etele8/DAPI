@@ -77,8 +77,8 @@ merged_solidity_warn = 0.5
 
 [proposal.crop_export]
 enabled = true
-padding_px = 18
-min_crop_size_px = 56
+padding_px = 24
+min_crop_size_px = 72
 force_square = true
 clamp_to_image = true
 export_images = true

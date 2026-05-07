@@ -80,19 +80,9 @@ def _compute_crop_bbox(
     return left, top, crop_w, crop_h
 
 
-def _overlay_crop(crop_image: np.ndarray, crop_mask: np.ndarray, candidate_id: int) -> np.ndarray:
+def _overlay_crop(crop_image: np.ndarray, crop_mask: np.ndarray) -> np.ndarray:
     overlay = crop_image.copy()
     overlay[crop_mask > 0] = (0, 220, 0)
-    cv2.putText(
-        overlay,
-        f"C{candidate_id:04d}",
-        (6, 18),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        (255, 255, 255),
-        1,
-        cv2.LINE_AA,
-    )
     return cv2.addWeighted(crop_image, 0.65, overlay, 0.35, 0.0)
 
 
@@ -140,7 +130,7 @@ def export_candidate_crops(
         if config.export_images:
             _write_image(image_path, crop_image)
         if config.export_overlays:
-            _write_image(overlay_path, _overlay_crop(crop_image, crop_mask, candidate.candidate_id))
+            _write_image(overlay_path, _overlay_crop(crop_image, crop_mask))
         if config.export_masks:
             _write_image(mask_path, crop_mask)
 
