@@ -14,6 +14,7 @@ from src.annotation_review import (
     ensure_annotation_manifests,
     load_annotation_rows,
     save_annotation_rows,
+    _load_mask_from_row,
 )
 from src.annotation_manifest import write_annotation_manifest
 from src.config import AnnotationExportConfig
@@ -148,6 +149,33 @@ class AnnotationReviewTests(unittest.TestCase):
         self.assertEqual(rows[0]["edited_mask_path"], "")
         self.assertEqual(rows[0]["mask_was_edited"], "false")
         self.assertEqual(rows[0]["mask_edit_mode"], "")
+
+    def test_load_mask_from_row_infers_legacy_mask_path_from_crop_path(self) -> None:
+        case_dir = _case_dir("annotation_legacy_mask_infer")
+        manifest_dir = case_dir / "annotation"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        _write_image(case_dir / "crops" / "images" / "img_c0001.png")
+        mask = np.zeros((32, 32), dtype=np.uint8)
+        mask[8:20, 10:22] = 255
+        ok, encoded = cv2.imencode(".png", mask)
+        if not ok:
+            raise ValueError("Could not encode legacy mask")
+        legacy_mask_path = case_dir / "crops" / "masks" / "img_c0001.png"
+        legacy_mask_path.parent.mkdir(parents=True, exist_ok=True)
+        encoded.tofile(legacy_mask_path)
+
+        manifest_path = manifest_dir / "annotation_manifest.csv"
+        manifest_path.write_text(
+            "crop_id,image_id,candidate_id,crop_path,overlay_path,label,notes\n"
+            "img_c0001,img,1,crops/images/img_c0001.png,crops/overlays/img_c0001.png,,\n",
+            encoding="utf-8",
+        )
+        rows, _ = load_annotation_rows(manifest_path)
+        loaded_mask = _load_mask_from_row(manifest_path, rows[0])
+
+        self.assertIsNotNone(loaded_mask)
+        assert loaded_mask is not None
+        self.assertEqual(int(np.count_nonzero(loaded_mask)), int(np.count_nonzero(mask)))
 
 
 if __name__ == "__main__":

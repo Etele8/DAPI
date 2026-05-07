@@ -285,10 +285,19 @@ def _resolve_variant_paths(
 def _resolve_row_path(manifest_path: Path, row: dict[str, str], field_name: str) -> Path | None:
     manifest_root = _manifest_root(manifest_path)
     raw_value = row.get(field_name, "").strip()
-    if not raw_value:
-        return None
-    path = manifest_root / raw_value
-    return path if path.exists() else None
+    candidates: list[Path] = []
+    if raw_value:
+        candidates.append(manifest_root / raw_value)
+    if field_name == "mask_path":
+        crop_value = row.get("crop_path", "").strip()
+        if crop_value:
+            candidates.append(manifest_root / crop_value.replace("crops/images/", "crops/masks/"))
+            crop_path = Path(crop_value)
+            candidates.append(manifest_root / crop_path.parent.parent / "masks" / crop_path.name)
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
 
 
 def _build_display_variants(
