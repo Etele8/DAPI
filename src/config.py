@@ -180,6 +180,8 @@ class AnnotationReviewConfig:
     save_mask_key: str = "e"
     reset_mask_key: str = "r"
     undo_key: str = "z"
+    decrease_brush_key: str = "1"
+    increase_brush_key: str = "2"
     quit_key: str = "q"
     positive_label: str = "single_valid"
     negative_label: str = "invalid"
@@ -470,6 +472,8 @@ def default_proposal_config() -> ProposalWorkflowConfig:
             save_mask_key="e",
             reset_mask_key="r",
             undo_key="z",
+            decrease_brush_key="1",
+            increase_brush_key="2",
             quit_key="q",
             positive_label="single_valid",
             negative_label="invalid",

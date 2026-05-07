@@ -282,24 +282,49 @@ def _resolve_variant_paths(
     return variants
 
 
-def _resolve_edit_base_image_path(manifest_path: Path, row: dict[str, str], fallback_path: Path) -> Path:
+def _resolve_row_path(manifest_path: Path, row: dict[str, str], field_name: str) -> Path | None:
     manifest_root = _manifest_root(manifest_path)
-    crop_value = row.get("crop_path", "").strip()
-    if crop_value:
-        crop_path = manifest_root / crop_value
-        if crop_path.exists():
-            return crop_path
-    return fallback_path
+    raw_value = row.get(field_name, "").strip()
+    if not raw_value:
+        return None
+    path = manifest_root / raw_value
+    return path if path.exists() else None
+
+
+def _build_display_variants(
+    manifest_path: Path,
+    row: dict[str, str],
+    config: AnnotationReviewConfig,
+    *,
+    edit_active: bool,
+) -> list[tuple[str, Path | None]]:
+    variants: list[tuple[str, Path | None]] = []
+    if edit_active:
+        variants.append(("edit_overlay", None))
+        crop_path = _resolve_row_path(manifest_path, row, "crop_path")
+        if crop_path is not None:
+            variants.append(("raw_crop", crop_path))
+        variants.append(("edited_mask", None))
+        overlay_path = _resolve_row_path(manifest_path, row, "overlay_path")
+        if overlay_path is not None and overlay_path != crop_path:
+            variants.append(("original_overlay", overlay_path))
+        mask_path = _resolve_row_path(manifest_path, row, "mask_path")
+        if mask_path is not None:
+            variants.append(("original_mask", mask_path))
+        saved_path = _resolve_row_path(manifest_path, row, "edited_mask_path")
+        if saved_path is not None:
+            variants.append(("saved_edited_mask", saved_path))
+        return variants
+
+    for field_name, path in _resolve_variant_paths(manifest_path, row, config):
+        variants.append((field_name, path))
+    return variants
 
 
 def _load_mask_from_row(manifest_path: Path, row: dict[str, str]) -> np.ndarray | None:
-    manifest_root = _manifest_root(manifest_path)
     for field_name in ("edited_mask_path", "mask_path"):
-        raw_value = row.get(field_name, "").strip()
-        if not raw_value:
-            continue
-        path = manifest_root / raw_value
-        if not path.exists():
+        path = _resolve_row_path(manifest_path, row, field_name)
+        if path is None:
             continue
         mask = _read_image(path, flags=cv2.IMREAD_GRAYSCALE)
         return np.where(mask > 0, 255, 0).astype(np.uint8)
@@ -339,9 +364,10 @@ def _render_frame(
     session_total: int,
     config: AnnotationReviewConfig,
     edit_state: MaskEditState,
+    show_edit_overlay: bool,
 ) -> np.ndarray:
     display_base = _as_bgr(image)
-    if edit_state.active and edit_state.current_mask is not None:
+    if show_edit_overlay and edit_state.active and edit_state.current_mask is not None:
         display_base = _mask_overlay(display_base, edit_state.current_mask)
 
     display, scale = _fit_image(display_base, config)
@@ -364,7 +390,8 @@ def _render_frame(
         f"[{config.save_mask_key.upper()}] save mask  "
         f"[{config.reset_mask_key.upper()}] reset  "
         f"[{config.undo_key.upper()}] undo  "
-        f"[wheel] brush size  "
+        f"[{config.decrease_brush_key}] smaller  "
+        f"[{config.increase_brush_key}] larger  "
         f"[{config.quit_key.upper()}] quit",
     ]
 
@@ -474,14 +501,6 @@ def _annotation_mouse_callback(event: int, x: int, y: int, flags: int, userdata:
     )
     state.pointer_display_xy = display_point
 
-    if event == cv2.EVENT_MOUSEWHEEL:
-        wheel_delta = cv2.getMouseWheelDelta(flags)
-        if wheel_delta > 0:
-            state.brush_radius_px = min(state.brush_radius_px + 1, state.max_brush_radius_px)
-        elif wheel_delta < 0:
-            state.brush_radius_px = max(state.brush_radius_px - 1, state.min_brush_radius_px)
-        return
-
     if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_RBUTTONDOWN:
         state.save_undo_snapshot()
         state.mouse_down = True
@@ -542,7 +561,6 @@ def annotate_manifest(
         while 0 <= pointer < len(indices):
             row_index = indices[pointer]
             row = rows[row_index]
-            variants = _resolve_variant_paths(path, row, config)
             view_index = 0
             loaded_mask = _load_mask_from_row(path, row)
 
@@ -559,13 +577,29 @@ def annotate_manifest(
                 edit_state.dirty = False
 
             while True:
+                variants = _build_display_variants(path, row, config, edit_active=edit_state.active)
+                view_index = min(view_index, len(variants) - 1)
                 view_name, image_path = variants[view_index]
-                display_path = (
-                    _resolve_edit_base_image_path(path, row, image_path)
-                    if edit_state.active
-                    else image_path
-                )
-                image = _read_image(display_path)
+
+                if view_name == "edit_overlay":
+                    display_path = _resolve_row_path(path, row, "crop_path") or _resolve_row_path(path, row, "overlay_path")
+                    if display_path is None:
+                        raise FileNotFoundError(f"No crop or overlay image found for {row.get('crop_id', '(unknown)')}")
+                    image = _read_image(display_path)
+                    show_edit_overlay = True
+                elif view_name == "edited_mask":
+                    source_mask = edit_state.current_mask
+                    if source_mask is None:
+                        raise ValueError("Edited mask view requested without an active mask")
+                    image = source_mask
+                    show_edit_overlay = False
+                else:
+                    if image_path is None:
+                        raise ValueError(f"Missing image path for view {view_name}")
+                    flags = cv2.IMREAD_GRAYSCALE if "mask" in view_name else cv2.IMREAD_UNCHANGED
+                    image = _read_image(image_path, flags=flags)
+                    show_edit_overlay = False
+
                 frame = _render_frame(
                     image,
                     row=row,
@@ -575,6 +609,7 @@ def annotate_manifest(
                     session_total=len(indices),
                     config=config,
                     edit_state=edit_state,
+                    show_edit_overlay=show_edit_overlay,
                 )
                 cv2.imshow(config.window_name, frame)
                 key = cv2.waitKeyEx(30)
@@ -597,9 +632,16 @@ def annotate_manifest(
                 if char == config.toggle_view_key.lower() and len(variants) > 1:
                     view_index = (view_index + 1) % len(variants)
                     continue
+                if char == config.decrease_brush_key.lower():
+                    edit_state.brush_radius_px = max(edit_state.brush_radius_px - 1, config.min_brush_radius_px)
+                    continue
+                if char == config.increase_brush_key.lower():
+                    edit_state.brush_radius_px = min(edit_state.brush_radius_px + 1, config.max_brush_radius_px)
+                    continue
                 if char == config.edit_mask_key.lower():
                     base_mask = loaded_mask if loaded_mask is not None else np.zeros(image.shape[:2], dtype=np.uint8)
                     edit_state.begin(base_mask=base_mask, config=config)
+                    view_index = 0
                     continue
                 if char == config.reset_mask_key.lower() and edit_state.active:
                     edit_state.reset()
