@@ -15,7 +15,10 @@ from src.annotation_review import (
     load_annotation_rows,
     save_annotation_rows,
 )
+from src.annotation_manifest import write_annotation_manifest
+from src.config import AnnotationExportConfig
 from src.config import AnnotationReviewConfig
+from src.crop_export import CropRecord
 
 
 WORKSPACE_TMP = Path("test_tmp")
@@ -66,6 +69,9 @@ class AnnotationReviewTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["crop_path"], "nested/crop_001.png")
         self.assertEqual(rows[0]["overlay_path"], "nested/crop_001.png")
+        self.assertEqual(rows[0]["mask_path"], "")
+        self.assertEqual(rows[0]["edited_mask_path"], "")
+        self.assertEqual(rows[0]["mask_was_edited"], "false")
         self.assertEqual(rows[0]["label"], "")
 
     def test_ensure_annotation_manifests_falls_back_to_images(self) -> None:
@@ -98,6 +104,50 @@ class AnnotationReviewTests(unittest.TestCase):
         reloaded_rows, _ = load_annotation_rows(manifest_path)
 
         self.assertEqual(reloaded_rows[0]["label"], "single_valid")
+
+    def test_load_annotation_rows_backfills_new_mask_fields(self) -> None:
+        case_dir = _case_dir("annotation_backfill")
+        manifest_path = case_dir / "annotation_manifest.csv"
+        manifest_path.write_text(
+            "crop_id,image_id,candidate_id,crop_path,overlay_path,label,notes\n"
+            "img_c0001,img,1,crops/images/img_c0001.png,crops/overlays/img_c0001.png,,\n",
+            encoding="utf-8",
+        )
+        rows, fieldnames = load_annotation_rows(manifest_path)
+
+        self.assertIn("mask_path", fieldnames)
+        self.assertIn("edited_mask_path", fieldnames)
+        self.assertIn("mask_was_edited", fieldnames)
+        self.assertIn("mask_edit_mode", fieldnames)
+        self.assertEqual(rows[0]["mask_path"], "")
+        self.assertEqual(rows[0]["edited_mask_path"], "")
+        self.assertEqual(rows[0]["mask_was_edited"], "")
+        self.assertEqual(rows[0]["mask_edit_mode"], "")
+
+    def test_annotation_manifest_includes_mask_columns(self) -> None:
+        case_dir = _case_dir("annotation_manifest_schema")
+        record = CropRecord(
+            crop_id="img_c0001",
+            image_id="img",
+            candidate_id=1,
+            source_bbox=(1, 2, 3, 4),
+            crop_bbox=(0, 0, 16, 16),
+            centroid_xy=(8.0, 8.0),
+            area_px=42,
+            touches_border=False,
+            qc_flag="",
+            profile_name="proposal_high_recall",
+            crop_path="crops/images/img_c0001.png",
+            overlay_path="crops/overlays/img_c0001.png",
+            mask_path="crops/masks/img_c0001.png",
+        )
+
+        files = write_annotation_manifest([record], output_dir=case_dir, config=AnnotationExportConfig())
+        rows, _ = load_annotation_rows(files["annotation_manifest"])
+        self.assertEqual(rows[0]["mask_path"], "crops/masks/img_c0001.png")
+        self.assertEqual(rows[0]["edited_mask_path"], "")
+        self.assertEqual(rows[0]["mask_was_edited"], "false")
+        self.assertEqual(rows[0]["mask_edit_mode"], "")
 
 
 if __name__ == "__main__":

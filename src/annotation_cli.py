@@ -63,7 +63,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = annotate_manifest(args.manifest, config=cfg.proposal.review, include_labeled=args.include_labeled)
         print(
             f"manifest={result.manifest_path} rows_in_scope={result.rows_in_scope} "
-            f"label_updates={result.rows_labeled} remaining_unlabeled={result.remaining_unlabeled} "
+            f"label_updates={result.rows_labeled} mask_updates={result.masks_saved} "
+            f"remaining_unlabeled={result.remaining_unlabeled} "
             f"stopped_early={result.stopped_early}"
         )
         return 0
@@ -71,7 +72,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_result = annotate_root(args.root, config=cfg.proposal.review, include_labeled=args.include_labeled)
     print(
         f"annotation_root={Path(args.root)} manifests={run_result.manifests_processed} "
-        f"label_updates={run_result.rows_labeled} remaining_unlabeled={run_result.remaining_unlabeled} "
+        f"label_updates={run_result.rows_labeled} mask_updates={run_result.masks_saved} "
+        f"remaining_unlabeled={run_result.remaining_unlabeled} "
         f"stopped_early={run_result.stopped_early}"
     )
     return 0

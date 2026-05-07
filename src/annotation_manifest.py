@@ -19,7 +19,19 @@ def write_annotation_manifest(
     manifest_path = output_dir / config.manifest_name
     label_schema_path = output_dir / "label_schema.json"
 
-    fieldnames = ["crop_id", "image_id", "candidate_id", "crop_path", "overlay_path", "label", "notes"]
+    fieldnames = [
+        "crop_id",
+        "image_id",
+        "candidate_id",
+        "crop_path",
+        "overlay_path",
+        "mask_path",
+        "edited_mask_path",
+        "mask_was_edited",
+        "mask_edit_mode",
+        "label",
+        "notes",
+    ]
     if config.include_helper_columns:
         fieldnames.extend(["touches_border", "area_px", "qc_flag", "profile_name"])
 
@@ -33,6 +45,10 @@ def write_annotation_manifest(
                 "candidate_id": record.candidate_id,
                 "crop_path": record.crop_path,
                 "overlay_path": record.overlay_path,
+                "mask_path": record.mask_path,
+                "edited_mask_path": "",
+                "mask_was_edited": "false",
+                "mask_edit_mode": "",
                 "label": "",
                 "notes": "",
             }
