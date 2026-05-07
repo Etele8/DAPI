@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from src.annotation_review import annotate_manifest, annotate_root
 from src.classifier_dataset import prepare_classifier_dataset
 from src.config import apply_cli_overrides, available_profiles, default_config
 from src.io.discover import discover_samples
@@ -18,11 +19,11 @@ from src.pipeline import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dapi-segment",
-        description="Run the evidence-based DAPI segmentation, proposal, and refinement workflows.",
+        description="Run the evidence-based DAPI segmentation, proposal, refinement, and annotation workflows.",
     )
     parser.add_argument(
         "--mode",
-        choices=("segment", "proposals", "prepare-dataset", "refine"),
+        choices=("segment", "proposals", "prepare-dataset", "refine", "annotate"),
         default="segment",
         help="Pipeline mode to run.",
     )
@@ -78,6 +79,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--run-biomass",
         action="store_true",
         help="When refining positive crops, also run biomass on the refined masks.",
+    )
+    parser.add_argument(
+        "--annotation-root",
+        default=None,
+        help="Root directory for recursive annotation manifest or crop-image discovery in annotate mode.",
+    )
+    parser.add_argument(
+        "--include-labeled",
+        action="store_true",
+        help="In annotate mode, review already labeled rows as well instead of only unlabeled rows.",
     )
     return parser
 
@@ -141,6 +152,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = run_refinement_from_manifest(args.manifest, output_dir, app_config=cfg, run_biomass=args.run_biomass)
         print(
             f"refined_crops={len(result.refined_records)} metadata={result.files['refined_metadata_csv']}"
+        )
+        return 0
+
+    if args.mode == "annotate":
+        if args.manifest is not None:
+            session = annotate_manifest(args.manifest, config=cfg.proposal.review, include_labeled=args.include_labeled)
+            print(
+                f"manifest={session.manifest_path} rows_in_scope={session.rows_in_scope} "
+                f"label_updates={session.rows_labeled} remaining_unlabeled={session.remaining_unlabeled} "
+                f"stopped_early={session.stopped_early}"
+            )
+            return 0
+
+        annotation_root = args.annotation_root or args.output_dir
+        result = annotate_root(annotation_root, config=cfg.proposal.review, include_labeled=args.include_labeled)
+        print(
+            f"annotation_root={Path(annotation_root)} manifests={result.manifests_processed} "
+            f"label_updates={result.rows_labeled} remaining_unlabeled={result.remaining_unlabeled} "
+            f"stopped_early={result.stopped_early}"
         )
         return 0
 

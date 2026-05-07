@@ -1,3 +1,11 @@
+from src.annotation_review import (
+    AnnotationRunResult,
+    AnnotationSessionResult,
+    annotate_manifest,
+    annotate_root,
+    build_annotation_manifest_from_images,
+    collect_annotation_manifests,
+)
 from src.biomass import (
     BiomassConfig,
     BiomassDebugFiles,
@@ -32,6 +40,8 @@ from src.segmentation.segment import (
 )
 
 __all__ = [
+    "AnnotationRunResult",
+    "AnnotationSessionResult",
     "BlobEnhancementConfig",
     "BiomassConfig",
     "BiomassDebugFiles",
@@ -58,7 +68,11 @@ __all__ = [
     "SegmentationResult",
     "SplitConfig",
     "ThresholdConfig",
+    "annotate_manifest",
+    "annotate_root",
     "build_artifact_mask",
+    "build_annotation_manifest_from_images",
+    "collect_annotation_manifests",
     "export_candidate_crops",
     "generate_proposals",
     "ingest_annotation_manifest",

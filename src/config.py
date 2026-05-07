@@ -155,6 +155,30 @@ class AnnotationExportConfig:
 
 
 @dataclass(slots=True)
+class AnnotationReviewConfig:
+    manifest_name: str = "annotation_manifest.csv"
+    recursive: bool = True
+    fullscreen: bool = True
+    start_from_first_unlabeled: bool = True
+    primary_image_field: str = "overlay_path"
+    fallback_image_fields: tuple[str, ...] = ("overlay_path", "crop_path", "mask_path")
+    image_extensions: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
+    display_max_width_px: int = 1800
+    display_max_height_px: int = 1000
+    max_upscale: float = 12.0
+    positive_key: str = "t"
+    negative_key: str = "f"
+    clear_key: str = "u"
+    skip_key: str = "s"
+    back_key: str = "b"
+    toggle_view_key: str = "v"
+    quit_key: str = "q"
+    positive_label: str = "single_valid"
+    negative_label: str = "invalid"
+    window_name: str = "DAPI Annotation"
+
+
+@dataclass(slots=True)
 class ClassifierDatasetConfig:
     positive_labels: tuple[str, ...] = ("single_valid",)
     negative_labels: tuple[str, ...] = ("invalid", "merged")
@@ -183,6 +207,7 @@ class ProposalWorkflowConfig:
     filter: ProposalFilterConfig = field(default_factory=ProposalFilterConfig)
     crop_export: CropExportConfig = field(default_factory=CropExportConfig)
     annotation: AnnotationExportConfig = field(default_factory=AnnotationExportConfig)
+    review: AnnotationReviewConfig = field(default_factory=AnnotationReviewConfig)
     dataset: ClassifierDatasetConfig = field(default_factory=ClassifierDatasetConfig)
     refinement: LocalRefinementConfig = field(default_factory=LocalRefinementConfig)
     candidates_csv_name: str = "proposal_candidates.csv"
@@ -411,6 +436,28 @@ def default_proposal_config() -> ProposalWorkflowConfig:
             manifest_name="annotation_manifest.csv",
             label_options=("single_valid", "invalid", "merged", "uncertain"),
             include_helper_columns=True,
+        ),
+        review=AnnotationReviewConfig(
+            manifest_name="annotation_manifest.csv",
+            recursive=True,
+            fullscreen=True,
+            start_from_first_unlabeled=True,
+            primary_image_field="overlay_path",
+            fallback_image_fields=("overlay_path", "crop_path", "mask_path"),
+            image_extensions=(".png", ".jpg", ".jpeg", ".tif", ".tiff"),
+            display_max_width_px=1800,
+            display_max_height_px=1000,
+            max_upscale=12.0,
+            positive_key="t",
+            negative_key="f",
+            clear_key="u",
+            skip_key="s",
+            back_key="b",
+            toggle_view_key="v",
+            quit_key="q",
+            positive_label="single_valid",
+            negative_label="invalid",
+            window_name="DAPI Annotation",
         ),
         dataset=ClassifierDatasetConfig(
             positive_labels=("single_valid",),

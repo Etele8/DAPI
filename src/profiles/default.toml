@@ -73,3 +73,25 @@ min_slice_length_px = 0.75
 zeder_max_depth = 8
 zeder_width_linearity_tol_px = 0.40
 max_debug_panels = 24
+
+[proposal.review]
+manifest_name = "annotation_manifest.csv"
+recursive = true
+fullscreen = true
+start_from_first_unlabeled = true
+primary_image_field = "overlay_path"
+fallback_image_fields = ["overlay_path", "crop_path", "mask_path"]
+image_extensions = [".png", ".jpg", ".jpeg", ".tif", ".tiff"]
+display_max_width_px = 1800
+display_max_height_px = 1000
+max_upscale = 12.0
+positive_key = "t"
+negative_key = "f"
+clear_key = "u"
+skip_key = "s"
+back_key = "b"
+toggle_view_key = "v"
+quit_key = "q"
+positive_label = "single_valid"
+negative_label = "invalid"
+window_name = "DAPI Annotation"
