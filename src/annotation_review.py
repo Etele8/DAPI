@@ -282,6 +282,16 @@ def _resolve_variant_paths(
     return variants
 
 
+def _resolve_edit_base_image_path(manifest_path: Path, row: dict[str, str], fallback_path: Path) -> Path:
+    manifest_root = _manifest_root(manifest_path)
+    crop_value = row.get("crop_path", "").strip()
+    if crop_value:
+        crop_path = manifest_root / crop_value
+        if crop_path.exists():
+            return crop_path
+    return fallback_path
+
+
 def _load_mask_from_row(manifest_path: Path, row: dict[str, str]) -> np.ndarray | None:
     manifest_root = _manifest_root(manifest_path)
     for field_name in ("edited_mask_path", "mask_path"):
@@ -550,7 +560,12 @@ def annotate_manifest(
 
             while True:
                 view_name, image_path = variants[view_index]
-                image = _read_image(image_path)
+                display_path = (
+                    _resolve_edit_base_image_path(path, row, image_path)
+                    if edit_state.active
+                    else image_path
+                )
+                image = _read_image(display_path)
                 frame = _render_frame(
                     image,
                     row=row,
