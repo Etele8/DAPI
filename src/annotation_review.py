@@ -330,8 +330,14 @@ def _build_display_variants(
     return variants
 
 
-def _load_mask_from_row(manifest_path: Path, row: dict[str, str]) -> np.ndarray | None:
-    for field_name in ("edited_mask_path", "mask_path"):
+def _load_mask_from_row(
+    manifest_path: Path,
+    row: dict[str, str],
+    *,
+    prefer_edited: bool = True,
+) -> np.ndarray | None:
+    field_order = ("edited_mask_path", "mask_path") if prefer_edited else ("mask_path", "edited_mask_path")
+    for field_name in field_order:
         path = _resolve_row_path(manifest_path, row, field_name)
         if path is None:
             continue
@@ -571,7 +577,8 @@ def annotate_manifest(
             row_index = indices[pointer]
             row = rows[row_index]
             view_index = 0
-            loaded_mask = _load_mask_from_row(path, row)
+            loaded_mask = _load_mask_from_row(path, row, prefer_edited=True)
+            original_mask = _load_mask_from_row(path, row, prefer_edited=False)
 
             if loaded_mask is not None:
                 edit_state.original_mask = loaded_mask.copy()
@@ -648,7 +655,9 @@ def annotate_manifest(
                     edit_state.brush_radius_px = min(edit_state.brush_radius_px + 1, config.max_brush_radius_px)
                     continue
                 if char == config.edit_mask_key.lower():
-                    base_mask = loaded_mask if loaded_mask is not None else np.zeros(image.shape[:2], dtype=np.uint8)
+                    base_mask = original_mask if original_mask is not None else loaded_mask
+                    if base_mask is None:
+                        base_mask = np.zeros(image.shape[:2], dtype=np.uint8)
                     edit_state.begin(base_mask=base_mask, config=config)
                     view_index = 0
                     continue

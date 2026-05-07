@@ -177,6 +177,42 @@ class AnnotationReviewTests(unittest.TestCase):
         assert loaded_mask is not None
         self.assertEqual(int(np.count_nonzero(loaded_mask)), int(np.count_nonzero(mask)))
 
+    def test_load_mask_from_row_can_prefer_original_over_saved_edit(self) -> None:
+        case_dir = _case_dir("annotation_prefer_original_mask")
+        manifest_dir = case_dir / "annotation"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+
+        original_mask = np.zeros((20, 20), dtype=np.uint8)
+        original_mask[2:10, 2:10] = 255
+        edited_mask = np.zeros((20, 20), dtype=np.uint8)
+        edited_mask[12:18, 12:18] = 255
+
+        for path, image in (
+            (case_dir / "crops" / "masks" / "img_c0001.png", original_mask),
+            (manifest_dir / "edited_masks" / "img_c0001.png", edited_mask),
+        ):
+            ok, encoded = cv2.imencode(".png", image)
+            if not ok:
+                raise ValueError(f"Could not encode mask for {path}")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            encoded.tofile(path)
+
+        manifest_path = manifest_dir / "annotation_manifest.csv"
+        manifest_path.write_text(
+            "crop_id,image_id,candidate_id,crop_path,overlay_path,mask_path,edited_mask_path,label,notes\n"
+            "img_c0001,img,1,crops/images/img_c0001.png,crops/overlays/img_c0001.png,crops/masks/img_c0001.png,annotation/edited_masks/img_c0001.png,,\n",
+            encoding="utf-8",
+        )
+        rows, _ = load_annotation_rows(manifest_path)
+        loaded_original = _load_mask_from_row(manifest_path, rows[0], prefer_edited=False)
+        loaded_edited = _load_mask_from_row(manifest_path, rows[0], prefer_edited=True)
+
+        self.assertIsNotNone(loaded_original)
+        self.assertIsNotNone(loaded_edited)
+        assert loaded_original is not None and loaded_edited is not None
+        self.assertEqual(int(np.count_nonzero(loaded_original[:10, :10])), int(np.count_nonzero(original_mask[:10, :10])))
+        self.assertEqual(int(np.count_nonzero(loaded_edited[12:18, 12:18])), int(np.count_nonzero(edited_mask[12:18, 12:18])))
+
 
 if __name__ == "__main__":
     unittest.main()
