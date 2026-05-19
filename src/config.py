@@ -201,10 +201,50 @@ class ClassifierDatasetConfig:
     split_subdir: str = "classifier_dataset"
 
 
+def _refinement_segmentation_default() -> SegmentationConfig:
+    """Segmentation defaults tuned for local refinement on accepted crops.
+
+    Diverges from the full-image defaults: looser thresholds, larger closing,
+    and relaxed region filters so a single in-focus object dominates a crop.
+    """
+    return SegmentationConfig(
+        threshold=ThresholdConfig(
+            method="hysteresis",
+            otsu_scale=0.95,
+            percentile=92.0,
+            adaptive_block_size=31,
+            adaptive_c=-3.0,
+            positive_floor_percentile=70.0,
+            positive_floor_value=6,
+            hysteresis_low_scale=0.82,
+            hysteresis_high_scale=1.0,
+            pre_blur_kernel_size=1,
+        ),
+        morphology=MorphologyConfig(
+            opening_kernel_size=1,
+            closing_kernel_size=3,
+            fill_holes=True,
+            min_hole_area_px=18,
+        ),
+        region_filter=RegionFilterConfig(
+            min_area_px=8,
+            max_area_px=None,
+            min_width_px=2,
+            min_height_px=2,
+            max_aspect_ratio=8.0,
+            min_solidity=0.2,
+            min_convexity=0.2,
+            min_circularity=0.05,
+            max_eccentricity=0.995,
+            exclude_border_touching=False,
+        ),
+    )
+
+
 @dataclass(slots=True)
 class LocalRefinementConfig:
     enabled: bool = True
-    segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
+    segmentation: SegmentationConfig = field(default_factory=_refinement_segmentation_default)
     center_distance_weight: float = 1.0
     refined_masks_subdir: str = "refined/masks"
     refined_overlays_subdir: str = "refined/overlays"
@@ -234,7 +274,6 @@ class DiscoveryConfig:
     report_txt_suffixes: tuple[str, ...] = ("-report.txt",)
     report_xlsx_suffixes: tuple[str, ...] = ("-report.xlsx",)
 
-    # gray variants seen in your dataset
     gray_name_markers: tuple[str, ...] = (
         "_grayscale",
         "_greyscale",
@@ -251,9 +290,9 @@ class DiscoveryConfig:
 class AppConfig:
     discovery: DiscoveryConfig
     prefer_blue: bool = True
-    segmentation: SegmentationConfig = field(default_factory=lambda: default_segmentation_config())
-    biomass: BiomassConfig = field(default_factory=lambda: default_biomass_config())
-    proposal: ProposalWorkflowConfig = field(default_factory=lambda: default_proposal_config())
+    segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
+    biomass: BiomassConfig = field(default_factory=BiomassConfig)
+    proposal: ProposalWorkflowConfig = field(default_factory=ProposalWorkflowConfig)
     profile_name: str = DEFAULT_PROFILE_NAME
     profile_path: Path | None = None
 
@@ -332,210 +371,6 @@ def _load_profile_data(*, profile_name: str = DEFAULT_PROFILE_NAME, profile_path
     return data, resolved_profile_path
 
 
-def default_segmentation_config() -> SegmentationConfig:
-    return SegmentationConfig(
-        preprocessing=PreprocessingConfig(
-            use_median_blur=True,
-            median_kernel_size=3,
-        ),
-        blue_dominance=BlueDominanceConfig(
-            blue_green_weight=0.6,
-            blue_red_weight=0.5,
-            blue_channel_weight=0.25,
-            local_suppression_kernel_size=35,
-            local_suppression_strength=0.95,
-        ),
-        blob_enhancement=BlobEnhancementConfig(
-            source="max_blue_value",
-            top_hat_kernel_size=11,
-            dog_sigma_small=0.7,
-            dog_sigma_large=3.0,
-            top_hat_weight=0.6,
-            dog_weight=0.8,
-        ),
-        local_suppression=LocalSuppressionConfig(
-            blur_kernel_size=31,
-            source="max_blue_value",
-        ),
-        fusion=EvidenceFusionConfig(
-            blue_weight=0.50,
-            blob_weight=0.70,
-            suppression_weight=0.30,
-            gamma=0.5,
-        ),
-        threshold=ThresholdConfig(
-            method="hysteresis",
-            otsu_scale=1.0,
-            percentile=95.0,
-            adaptive_block_size=31,
-            adaptive_c=-4.0,
-            positive_floor_percentile=85.0,
-            positive_floor_value=8,
-            hysteresis_low_scale=0.87,
-            hysteresis_high_scale=1.05,
-            pre_blur_kernel_size=1,
-        ),
-        morphology=MorphologyConfig(
-            opening_kernel_size=1,
-            closing_kernel_size=0,
-            fill_holes=True,
-            min_hole_area_px=12,
-        ),
-        region_filter=RegionFilterConfig(
-            min_area_px=8,
-            max_area_px=2000,
-            min_width_px=2,
-            min_height_px=2,
-            max_aspect_ratio=3.5,
-            min_solidity=0.57,
-            min_convexity=0.85,
-            min_circularity=0.32,
-            max_eccentricity=0.95,
-            exclude_border_touching=False,
-        ),
-        split=SplitConfig(
-            enabled=False,
-            distance_threshold_ratio=0.45,
-            min_distance_px=2,
-        ),
-    )
-
-
-def default_biomass_config() -> BiomassConfig:
-    return BiomassConfig(
-        microns_per_pixel=None,
-        min_area_px2=12.0,
-        smoothing_points=64,
-        smoothing_window=7,
-        min_slice_length_px=0.75,
-        zeder_max_depth=8,
-        zeder_width_linearity_tol_px=0.40,
-        max_debug_panels=24,
-    )
-
-
-def default_proposal_config() -> ProposalWorkflowConfig:
-    return ProposalWorkflowConfig(
-        filter=ProposalFilterConfig(
-            min_area_px=4,
-            max_area_px=None,
-            keep_border_touching=True,
-            small_area_warn_px=8,
-            large_area_warn_px=2500,
-            merged_aspect_ratio_warn=4.5,
-            merged_eccentricity_warn=0.98,
-            merged_solidity_warn=0.5,
-        ),
-        crop_export=CropExportConfig(
-            enabled=True,
-            padding_px=24,
-            min_crop_size_px=72,
-            force_square=True,
-            clamp_to_image=True,
-            export_images=True,
-            export_overlays=True,
-            export_masks=True,
-            images_subdir="crops/images",
-            overlays_subdir="crops/overlays",
-            masks_subdir="crops/masks",
-            metadata_csv_name="crop_metadata.csv",
-            metadata_jsonl_name="crop_metadata.jsonl",
-        ),
-        annotation=AnnotationExportConfig(
-            manifest_subdir="annotation",
-            manifest_name="annotation_manifest.csv",
-            label_options=("single_valid", "invalid", "merged", "uncertain"),
-            include_helper_columns=True,
-        ),
-        review=AnnotationReviewConfig(
-            manifest_name="annotation_manifest.csv",
-            recursive=True,
-            fullscreen=True,
-            start_from_first_unlabeled=True,
-            edited_masks_subdir="annotation/edited_masks",
-            primary_image_field="overlay_path",
-            fallback_image_fields=("overlay_path", "crop_path", "mask_path"),
-            image_extensions=(".png", ".jpg", ".jpeg", ".tif", ".tiff"),
-            display_max_width_px=1800,
-            display_max_height_px=1000,
-            max_upscale=12.0,
-            initial_brush_radius_px=6,
-            min_brush_radius_px=1,
-            max_brush_radius_px=48,
-            positive_key="t",
-            negative_key="f",
-            clear_key="u",
-            skip_key="s",
-            back_key="b",
-            toggle_view_key="v",
-            edit_mask_key="m",
-            save_mask_key="e",
-            reset_mask_key="r",
-            undo_key="z",
-            decrease_brush_key="1",
-            increase_brush_key="2",
-            quit_key="q",
-            positive_label="single_valid",
-            negative_label="invalid",
-            window_name="DAPI Annotation",
-        ),
-        dataset=ClassifierDatasetConfig(
-            positive_labels=("single_valid",),
-            negative_labels=("invalid", "merged"),
-            excluded_labels=("uncertain",),
-            train_fraction=0.7,
-            val_fraction=0.15,
-            test_fraction=0.15,
-            split_seed=13,
-            allow_image_leakage=False,
-            split_subdir="classifier_dataset",
-        ),
-        refinement=LocalRefinementConfig(
-            enabled=True,
-            segmentation=SegmentationConfig(
-                threshold=ThresholdConfig(
-                    method="hysteresis",
-                    otsu_scale=0.95,
-                    percentile=92.0,
-                    adaptive_block_size=31,
-                    adaptive_c=-3.0,
-                    positive_floor_percentile=70.0,
-                    positive_floor_value=6,
-                    hysteresis_low_scale=0.82,
-                    hysteresis_high_scale=1.0,
-                    pre_blur_kernel_size=1,
-                ),
-                morphology=MorphologyConfig(
-                    opening_kernel_size=1,
-                    closing_kernel_size=3,
-                    fill_holes=True,
-                    min_hole_area_px=18,
-                ),
-                region_filter=RegionFilterConfig(
-                    min_area_px=8,
-                    max_area_px=None,
-                    min_width_px=2,
-                    min_height_px=2,
-                    max_aspect_ratio=8.0,
-                    min_solidity=0.2,
-                    min_convexity=0.2,
-                    min_circularity=0.05,
-                    max_eccentricity=0.995,
-                    exclude_border_touching=False,
-                ),
-            ),
-            center_distance_weight=1.0,
-            refined_masks_subdir="refined/masks",
-            refined_overlays_subdir="refined/overlays",
-            refined_metadata_name="refined_crops.csv",
-            biomass_subdir="refined/biomass",
-        ),
-        candidates_csv_name="proposal_candidates.csv",
-        candidates_jsonl_name="proposal_candidates.jsonl",
-        debug_subdir_name="proposal_debug",
-    )
-
-
 def apply_profile(
     config: AppConfig,
     *,
@@ -585,16 +420,9 @@ def apply_profile(
 
 
 def apply_cli_overrides(config: AppConfig, *, microns_per_pixel: float | None = None) -> AppConfig:
-    biomass = config.biomass if microns_per_pixel is None else replace(config.biomass, microns_per_pixel=microns_per_pixel)
-    return AppConfig(
-        discovery=config.discovery,
-        prefer_blue=config.prefer_blue,
-        segmentation=config.segmentation,
-        biomass=biomass,
-        proposal=config.proposal,
-        profile_name=config.profile_name,
-        profile_path=config.profile_path,
-    )
+    if microns_per_pixel is None:
+        return config
+    return replace(config, biomass=replace(config.biomass, microns_per_pixel=microns_per_pixel))
 
 
 def default_config(

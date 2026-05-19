@@ -10,11 +10,11 @@ import numpy as np
 
 from src.annotation_manifest import write_annotation_manifest
 from src.classifier_dataset import prepare_classifier_dataset
-from src.config import default_proposal_config
+from src.config import ProposalWorkflowConfig, SegmentationConfig
 from src.crop_export import export_candidate_crops
 from src.local_refinement import refine_positive_crops
 from src.proposal_generation import generate_proposals, write_candidate_records
-from src.segmentation.segment import SegmentationConfig, save_debug_outputs, segment_cells
+from src.segmentation.segment import save_debug_outputs, segment_cells
 
 
 WORKSPACE_TMP = Path("test_tmp")
@@ -80,7 +80,7 @@ class SegmentationPipelineTests(unittest.TestCase):
 
     def test_proposal_exports_candidates_and_annotation_manifest(self) -> None:
         image = _make_synthetic_cells((10, 12, 10))
-        proposal_cfg = default_proposal_config()
+        proposal_cfg = ProposalWorkflowConfig()
 
         case_dir = _case_dir("proposal_exports")
         result = generate_proposals(
@@ -114,7 +114,7 @@ class SegmentationPipelineTests(unittest.TestCase):
         self.assertTrue(annotation_files["annotation_manifest"].exists())
 
     def test_dataset_split_is_image_grouped(self) -> None:
-        proposal_cfg = default_proposal_config()
+        proposal_cfg = ProposalWorkflowConfig()
         case_dir = _case_dir("dataset_split")
         manifest_path = case_dir / "annotation_manifest.csv"
         with manifest_path.open("w", newline="", encoding="utf-8") as handle:
@@ -173,7 +173,7 @@ class SegmentationPipelineTests(unittest.TestCase):
 
     def test_positive_crop_refinement_runs(self) -> None:
         image = _make_synthetic_cells((10, 12, 10))
-        proposal_cfg = default_proposal_config()
+        proposal_cfg = ProposalWorkflowConfig()
 
         case_dir = _case_dir("refinement")
         result = generate_proposals(
