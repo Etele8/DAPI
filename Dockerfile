@@ -6,6 +6,10 @@
 #   - SSH daemon configured for RunPod's PUBLIC_KEY env var injection
 #   - tmux, htop, unzip, rsync, vim-tiny for dev quality-of-life
 #   - Training launcher at /opt/runpod_train.sh
+#   - The DAPI project itself, git-cloned at /opt/dapi and installed editable
+#     (so `dapi-segment`, `dapi-annotate`, `python -m src.cellpose_export`,
+#     and `from src import ...` all work on the pod). Run
+#     `cd /opt/dapi && git pull` to refresh without rebuilding the image.
 #
 # Build (from project root):
 #   docker build -t <dockerhub-user>/dapi-cellpose:latest .
@@ -65,6 +69,13 @@ RUN mkdir -p /root/.cellpose/models \
     && curl -L --fail \
         -o /root/.cellpose/models/cpsam \
         https://huggingface.co/mouseland/cellpose-sam/resolve/main/cpsam
+
+# Bake the DAPI project into the image. It's a real git clone, so on a running
+# pod you can `cd /opt/dapi && git pull` to grab small updates without
+# rebuilding the image. For dependency changes (pyproject.toml), rebuild.
+RUN git clone --depth 1 https://github.com/Etele8/DAPI.git /opt/dapi \
+    && cd /opt/dapi \
+    && pip install --no-cache-dir -e ".[dev]"
 
 COPY docker/runpod_train.sh /opt/runpod_train.sh
 COPY docker/start.sh /opt/start.sh
