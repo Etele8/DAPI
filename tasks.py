@@ -98,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("test", help="Run the test suite via pytest.")
     sub.add_parser("list-profiles", help="List bundled segmentation profiles.")
+    sub.add_parser(
+        "cellpose-export",
+        help="Pack human-edited crops + masks into a Cellpose training bundle.",
+    )
 
     def _add_sample_cmd(name: str, help_: str, required: bool = True) -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_)
@@ -119,6 +123,13 @@ def main(argv: list[str] | None = None) -> int:
         return subprocess.call([sys.executable, "-m", "pytest", *extra])
     if args.task == "list-profiles":
         return _run(["-m", "src.cli", "--list-profiles", *extra])
+    if args.task == "cellpose-export":
+        return _run([
+            "-m", "src.cellpose_export",
+            "--annot-root", OUT_ANNOT,
+            "--out-dir", "outputs/cellpose_training",
+            *extra,
+        ])
     if args.task == "segment":
         return _run(_segment_cmd(args.sample, extra))
     if args.task == "proposals":
