@@ -312,7 +312,7 @@ def _build_display_variants(
         crop_path = _resolve_row_path(manifest_path, row, "crop_path")
         if crop_path is not None:
             variants.append(("raw_crop", crop_path))
-        variants.append(("edited_mask", None))
+            variants.append(("edit_overlay", crop_path))
         return variants
 
     for field_name, path in _resolve_variant_paths(manifest_path, row, config):
@@ -367,6 +367,14 @@ def _fit_image(image: np.ndarray, config: AnnotationReviewConfig) -> tuple[np.nd
     interpolation = cv2.INTER_CUBIC if scale > 1.0 else cv2.INTER_AREA
     new_size = (max(int(round(w * scale)), 1), max(int(round(h * scale)), 1))
     return cv2.resize(image, new_size, interpolation=interpolation), scale
+
+
+def _mask_overlay(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    if mask.shape[:2] != image.shape[:2]:
+        mask = _resize_mask_to_shape(mask, image.shape[:2])
+    overlay = image.copy()
+    overlay[mask > 0] = (0, 220, 0)
+    return cv2.addWeighted(image, 0.68, overlay, 0.32, 0.0)
 
 
 def _render_frame(
@@ -599,16 +607,12 @@ def annotate_manifest(
                 view_index = min(view_index, len(variants) - 1)
                 view_name, image_path = variants[view_index]
 
-                if view_name == "edited_mask":
-                    source_mask = edit_state.current_mask
-                    if source_mask is None:
-                        raise ValueError("Edited mask view requested without an active mask")
-                    image = source_mask
-                else:
-                    if image_path is None:
-                        raise ValueError(f"Missing image path for view {view_name}")
-                    flags = cv2.IMREAD_GRAYSCALE if "mask" in view_name else cv2.IMREAD_UNCHANGED
-                    image = _read_image(image_path, flags=flags)
+                if image_path is None:
+                    raise ValueError(f"Missing image path for view {view_name}")
+                flags = cv2.IMREAD_GRAYSCALE if "mask" in view_name else cv2.IMREAD_UNCHANGED
+                image = _read_image(image_path, flags=flags)
+                if view_name == "edit_overlay" and edit_state.current_mask is not None:
+                    image = _mask_overlay(_as_bgr(image), edit_state.current_mask)
 
                 frame = _render_frame(
                     image,
