@@ -1,0 +1,28 @@
+# Keep the Docker build context small: the Dockerfile only needs docker/
+# and itself. Everything else is mounted/copied at runtime, not baked in.
+
+# Python / venv artefacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Data + outputs — never bake user data into the image
+data/
+outputs/
+artifacts/
+test_tmp/
+
+# Tooling state
+.git/
+.gitignore
+.claude/
+.pytest_cache/
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
