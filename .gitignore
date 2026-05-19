@@ -2,6 +2,9 @@
 /data
 /artifacts
 /outputs
+/test_tmp
+/.venv
+/.claude
 
 */__pycache__/
 *.egg-info
