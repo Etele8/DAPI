@@ -309,20 +309,10 @@ def _build_display_variants(
 ) -> list[tuple[str, Path | None]]:
     variants: list[tuple[str, Path | None]] = []
     if edit_active:
-        variants.append(("edit_overlay", None))
         crop_path = _resolve_row_path(manifest_path, row, "crop_path")
         if crop_path is not None:
             variants.append(("raw_crop", crop_path))
         variants.append(("edited_mask", None))
-        overlay_path = _resolve_row_path(manifest_path, row, "overlay_path")
-        if overlay_path is not None and overlay_path != crop_path:
-            variants.append(("original_overlay", overlay_path))
-        mask_path = _resolve_row_path(manifest_path, row, "mask_path")
-        if mask_path is not None:
-            variants.append(("original_mask", mask_path))
-        saved_path = _resolve_row_path(manifest_path, row, "edited_mask_path")
-        if saved_path is not None:
-            variants.append(("saved_edited_mask", saved_path))
         return variants
 
     for field_name, path in _resolve_variant_paths(manifest_path, row, config):
@@ -346,6 +336,22 @@ def _load_mask_from_row(
     return None
 
 
+def _canonical_crop_shape(manifest_path: Path, row: dict[str, str]) -> tuple[int, int] | None:
+    """Shape of the raw crop image. Editing canvases and masks must align to this."""
+    crop_path = _resolve_row_path(manifest_path, row, "crop_path")
+    if crop_path is None:
+        return None
+    return _read_image(crop_path).shape[:2]
+
+
+def _resize_mask_to_shape(mask: np.ndarray, target_hw: tuple[int, int]) -> np.ndarray:
+    """Resize a binary mask to target_hw, preserving 0/255 values via nearest-neighbour."""
+    if mask.shape[:2] == target_hw:
+        return mask
+    resized = cv2.resize(mask, (target_hw[1], target_hw[0]), interpolation=cv2.INTER_NEAREST)
+    return np.where(resized > 0, 255, 0).astype(np.uint8)
+
+
 def _fit_image(image: np.ndarray, config: AnnotationReviewConfig) -> tuple[np.ndarray, float]:
     h, w = image.shape[:2]
     if h == 0 or w == 0:
@@ -363,12 +369,6 @@ def _fit_image(image: np.ndarray, config: AnnotationReviewConfig) -> tuple[np.nd
     return cv2.resize(image, new_size, interpolation=interpolation), scale
 
 
-def _mask_overlay(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    overlay = image.copy()
-    overlay[mask > 0] = (0, 220, 0)
-    return cv2.addWeighted(image, 0.68, overlay, 0.32, 0.0)
-
-
 def _render_frame(
     image: np.ndarray,
     *,
@@ -379,12 +379,8 @@ def _render_frame(
     session_total: int,
     config: AnnotationReviewConfig,
     edit_state: MaskEditState,
-    show_edit_overlay: bool,
 ) -> np.ndarray:
     display_base = _as_bgr(image)
-    if show_edit_overlay and edit_state.active and edit_state.current_mask is not None:
-        display_base = _mask_overlay(display_base, edit_state.current_mask)
-
     display, scale = _fit_image(display_base, config)
     mode_text = (
         f"edit=mask brush={edit_state.brush_radius_px}px dirty={edit_state.dirty}"
@@ -577,8 +573,14 @@ def annotate_manifest(
             row_index = indices[pointer]
             row = rows[row_index]
             view_index = 0
+            canonical_hw = _canonical_crop_shape(path, row)
             loaded_mask = _load_mask_from_row(path, row, prefer_edited=True)
             original_mask = _load_mask_from_row(path, row, prefer_edited=False)
+            if canonical_hw is not None:
+                if loaded_mask is not None:
+                    loaded_mask = _resize_mask_to_shape(loaded_mask, canonical_hw)
+                if original_mask is not None:
+                    original_mask = _resize_mask_to_shape(original_mask, canonical_hw)
 
             if loaded_mask is not None:
                 edit_state.original_mask = loaded_mask.copy()
@@ -597,24 +599,16 @@ def annotate_manifest(
                 view_index = min(view_index, len(variants) - 1)
                 view_name, image_path = variants[view_index]
 
-                if view_name == "edit_overlay":
-                    display_path = _resolve_row_path(path, row, "crop_path") or _resolve_row_path(path, row, "overlay_path")
-                    if display_path is None:
-                        raise FileNotFoundError(f"No crop or overlay image found for {row.get('crop_id', '(unknown)')}")
-                    image = _read_image(display_path)
-                    show_edit_overlay = True
-                elif view_name == "edited_mask":
+                if view_name == "edited_mask":
                     source_mask = edit_state.current_mask
                     if source_mask is None:
                         raise ValueError("Edited mask view requested without an active mask")
                     image = source_mask
-                    show_edit_overlay = False
                 else:
                     if image_path is None:
                         raise ValueError(f"Missing image path for view {view_name}")
                     flags = cv2.IMREAD_GRAYSCALE if "mask" in view_name else cv2.IMREAD_UNCHANGED
                     image = _read_image(image_path, flags=flags)
-                    show_edit_overlay = False
 
                 frame = _render_frame(
                     image,
@@ -625,7 +619,6 @@ def annotate_manifest(
                     session_total=len(indices),
                     config=config,
                     edit_state=edit_state,
-                    show_edit_overlay=show_edit_overlay,
                 )
                 cv2.imshow(config.window_name, frame)
                 key = cv2.waitKeyEx(30)
@@ -657,7 +650,8 @@ def annotate_manifest(
                 if char == config.edit_mask_key.lower():
                     base_mask = original_mask if original_mask is not None else loaded_mask
                     if base_mask is None:
-                        base_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                        target_hw = canonical_hw if canonical_hw is not None else image.shape[:2]
+                        base_mask = np.zeros(target_hw, dtype=np.uint8)
                     edit_state.begin(base_mask=base_mask, config=config)
                     view_index = 0
                     continue
