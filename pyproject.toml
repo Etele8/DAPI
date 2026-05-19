@@ -12,6 +12,9 @@ dependencies = [
     "opencv-python",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.scripts]
 dapi-segment = "src.cli:main"
 dapi-annotate = "src.annotation_cli:main"
@@ -22,3 +25,9 @@ include = ["src", "src.*"]
 
 [tool.setuptools.package-data]
 "src.profiles" = ["*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["*Tests"]
+python_functions = ["test_*"]
