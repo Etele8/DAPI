@@ -1,5 +1,4 @@
 from src.biomass.calibration import Calibration
-from src.config import BiomassConfig
 from src.biomass.volume_pipeline import (
     BiomassDebugFiles,
     BiomassObjectMeasurement,
@@ -9,7 +8,6 @@ from src.biomass.volume_pipeline import (
 )
 
 __all__ = [
-    "BiomassConfig",
     "BiomassDebugFiles",
     "BiomassObjectMeasurement",
     "BiomassPipelineResult",

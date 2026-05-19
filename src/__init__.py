@@ -1,3 +1,10 @@
+"""Top-level public API for the DAPI pipeline.
+
+Config dataclasses (`SegmentationConfig`, `BiomassConfig`, etc.) live in
+`src.config` and are imported from there directly. This module re-exports
+only the high-level workflow entry points and their result types.
+"""
+
 from src.annotation_review import (
     AnnotationRunResult,
     AnnotationSessionResult,
@@ -7,7 +14,6 @@ from src.annotation_review import (
     collect_annotation_manifests,
 )
 from src.biomass import (
-    BiomassConfig,
     BiomassDebugFiles,
     BiomassObjectMeasurement,
     BiomassPipelineResult,
@@ -18,22 +24,19 @@ from src.biomass import (
 from src.classifier_dataset import ingest_annotation_manifest, prepare_classifier_dataset
 from src.crop_export import CropExportResult, CropRecord, export_candidate_crops
 from src.local_refinement import RefinedCropRecord, refine_positive_crops
-from src.pipeline import PipelineOutput, build_artifact_mask, run_segmentation_for_sample
-from src.pipeline import ProposalPipelineOutput, RefinementPipelineOutput, run_proposal_pipeline_for_sample, run_refinement_from_manifest
+from src.pipeline import (
+    PipelineOutput,
+    ProposalPipelineOutput,
+    RefinementPipelineOutput,
+    build_artifact_mask,
+    run_proposal_pipeline_for_sample,
+    run_refinement_from_manifest,
+    run_segmentation_for_sample,
+)
 from src.proposal_generation import ProposalCandidate, ProposalGenerationResult, generate_proposals
-from src.segmentation.segment import (
-    BlobEnhancementConfig,
-    BlueDominanceConfig,
-    EvidenceFusionConfig,
-    LocalSuppressionConfig,
-    MorphologyConfig,
-    PreprocessingConfig,
+from src.segmentation import (
     RegionDetection,
-    RegionFilterConfig,
-    SegmentationConfig,
     SegmentationResult,
-    SplitConfig,
-    ThresholdConfig,
     save_debug_outputs,
     segment_cells,
     segment_objects,
@@ -42,36 +45,25 @@ from src.segmentation.segment import (
 __all__ = [
     "AnnotationRunResult",
     "AnnotationSessionResult",
-    "BlobEnhancementConfig",
-    "BiomassConfig",
     "BiomassDebugFiles",
     "BiomassObjectMeasurement",
     "BiomassPipelineResult",
     "BiomassSummary",
-    "BlueDominanceConfig",
     "Calibration",
     "CropExportResult",
     "CropRecord",
-    "EvidenceFusionConfig",
-    "LocalSuppressionConfig",
-    "MorphologyConfig",
     "PipelineOutput",
-    "PreprocessingConfig",
     "ProposalCandidate",
     "ProposalGenerationResult",
     "ProposalPipelineOutput",
     "RefinedCropRecord",
     "RefinementPipelineOutput",
     "RegionDetection",
-    "RegionFilterConfig",
-    "SegmentationConfig",
     "SegmentationResult",
-    "SplitConfig",
-    "ThresholdConfig",
     "annotate_manifest",
     "annotate_root",
-    "build_artifact_mask",
     "build_annotation_manifest_from_images",
+    "build_artifact_mask",
     "collect_annotation_manifests",
     "export_candidate_crops",
     "generate_proposals",
