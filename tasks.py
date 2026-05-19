@@ -25,10 +25,8 @@ from pathlib import Path
 from typing import Sequence
 
 DATA_ROOT = "data/samples"
-OUT_SEGMENT = "outputs/segment"
-OUT_PROPOSALS = "outputs/proposals"
-OUT_CLASSIFIER = "outputs/classifier"
-OUT_REFINED = "outputs/refined"
+OUT_SEGMENT = "outputs/segment"   # param-tuning playground for full-image segmentation
+OUT_ANNOT = "outputs/annot"       # human-in-the-loop pipeline root: proposals, manifests, classifier splits, refined masks
 DEFAULT_PROFILE_SEGMENT = "default"
 DEFAULT_PROFILE_PROPOSAL = "proposal_high_recall"
 
@@ -58,38 +56,38 @@ def _proposals_cmd(sample: str, extra: list[str]) -> list[str]:
         "--profile", DEFAULT_PROFILE_PROPOSAL,
         "--data-root", DATA_ROOT,
         "--sample", sample,
-        "--output-dir", OUT_PROPOSALS,
+        "--output-dir", OUT_ANNOT,
         *extra,
     ]
 
 
 def _annotate_cmd(sample: str | None, extra: list[str]) -> list[str]:
     if sample is None:
-        return ["-m", "src.annotation_cli", "--root", OUT_PROPOSALS, *extra]
-    manifest = Path(OUT_PROPOSALS) / sample / "annotation" / "annotation_manifest.csv"
+        return ["-m", "src.annotation_cli", "--root", OUT_ANNOT, *extra]
+    manifest = Path(OUT_ANNOT) / sample / "annotation" / "annotation_manifest.csv"
     return ["-m", "src.annotation_cli", "--manifest", str(manifest), *extra]
 
 
 def _prepare_dataset_cmd(sample: str, extra: list[str]) -> list[str]:
-    manifest = Path(OUT_PROPOSALS) / sample / "annotation" / "annotation_manifest.csv"
+    manifest = Path(OUT_ANNOT) / sample / "annotation" / "annotation_manifest.csv"
     return [
         "-m", "src.cli",
         "--mode", "prepare-dataset",
         "--profile", DEFAULT_PROFILE_PROPOSAL,
         "--manifest", str(manifest),
-        "--output-dir", OUT_CLASSIFIER,
+        "--output-dir", OUT_ANNOT,
         *extra,
     ]
 
 
 def _refine_cmd(sample: str, extra: list[str]) -> list[str]:
-    manifest = Path(OUT_PROPOSALS) / sample / "annotation" / "annotation_manifest.csv"
+    manifest = Path(OUT_ANNOT) / sample / "annotation" / "annotation_manifest.csv"
     return [
         "-m", "src.cli",
         "--mode", "refine",
         "--profile", DEFAULT_PROFILE_PROPOSAL,
         "--manifest", str(manifest),
-        "--output-dir", OUT_REFINED,
+        "--output-dir", OUT_ANNOT,
         *extra,
     ]
 
