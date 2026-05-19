@@ -32,7 +32,8 @@ exec python -m cellpose --train \
     --mask_filter _masks \
     --learning_rate 1e-5 \
     --weight_decay 0.1 \
-    --n_epochs 100 \
+    --n_epochs 40 \
+    --save_every 5 \
     --batch_size 8 \
     --min_train_masks 1 \
     --use_gpu \
