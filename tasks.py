@@ -102,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
         "cellpose-export",
         help="Pack human-edited crops + masks into a Cellpose training bundle.",
     )
+    sub.add_parser(
+        "cellpose-eval",
+        help="Score a trained Cellpose model on annotated crops, write visualizations.",
+    )
 
     def _add_sample_cmd(name: str, help_: str, required: bool = True) -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_)
@@ -128,6 +132,11 @@ def main(argv: list[str] | None = None) -> int:
             "-m", "src.cellpose_export",
             "--annot-root", OUT_ANNOT,
             "--out-dir", "outputs/cellpose_training",
+            *extra,
+        ])
+    if args.task == "cellpose-eval":
+        return _run([
+            "-m", "src.cellpose_eval",
             *extra,
         ])
     if args.task == "segment":
