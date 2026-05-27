@@ -24,7 +24,9 @@ from src.mask_overlay import overlay_outlines
 
 
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
-_MASK_MARKERS = ("_masks", "_cp_masks", "_overlay")
+# Skip Cellpose-generated artefacts and our own outputs so only true source
+# images get run through the model.
+_MASK_MARKERS = ("_masks", "_cp_masks", "_cp_outlines", "_cp_flows", "_flows", "_overlay")
 
 
 def _read_image(path: Path, flags: int = cv2.IMREAD_UNCHANGED) -> np.ndarray | None:

@@ -25,6 +25,8 @@ import numpy as np
 
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
 _MASK_EXTS = (".png", ".tif", ".tiff")
+# Cellpose-generated artefacts that should never be treated as source images.
+_ARTEFACT_MARKERS = ("_cp_outlines", "_cp_flows", "_flows", "_overlay")
 
 
 def _read_image(path: Path, flags: int = cv2.IMREAD_UNCHANGED) -> np.ndarray | None:
@@ -123,7 +125,7 @@ def process_dir(
         if not image_path.is_file() or image_path.suffix.lower() not in _IMAGE_EXTS:
             continue
         stem = image_path.stem
-        if stem.endswith(mask_suffix):
+        if stem.endswith(mask_suffix) or any(marker in stem for marker in _ARTEFACT_MARKERS):
             continue
         mask_path = _find_mask(masks_dir, stem, mask_suffix)
         if mask_path is None:
