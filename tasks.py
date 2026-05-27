@@ -114,6 +114,10 @@ def main(argv: list[str] | None = None) -> int:
         "cellpose-pack",
         help="Package Cellpose-GUI-annotated full images into a train/val bundle.",
     )
+    sub.add_parser(
+        "overlay",
+        help="Overlay instance-mask outlines on the original image for visual QC.",
+    )
 
     def _add_sample_cmd(name: str, help_: str, required: bool = True) -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_)
@@ -160,6 +164,11 @@ def main(argv: list[str] | None = None) -> int:
             "-m", "src.cellpose_pack",
             "--seed-dir", "outputs/cellpose_fullimage_seed",
             "--out-dir", "outputs/cellpose_fullimage_train",
+            *extra,
+        ])
+    if args.task == "overlay":
+        return _run([
+            "-m", "src.mask_overlay",
             *extra,
         ])
     if args.task == "segment":
