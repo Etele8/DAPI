@@ -4,6 +4,7 @@ from src.biomass.volume_pipeline import (
     BiomassObjectMeasurement,
     BiomassPipelineResult,
     BiomassSummary,
+    run_biomass_from_labels,
     run_biomass_stage,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "BiomassPipelineResult",
     "BiomassSummary",
     "Calibration",
+    "run_biomass_from_labels",
     "run_biomass_stage",
 ]

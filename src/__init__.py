@@ -19,6 +19,7 @@ from src.biomass import (
     BiomassPipelineResult,
     BiomassSummary,
     Calibration,
+    run_biomass_from_labels,
     run_biomass_stage,
 )
 from src.classifier_dataset import ingest_annotation_manifest, prepare_classifier_dataset
@@ -70,6 +71,7 @@ __all__ = [
     "ingest_annotation_manifest",
     "prepare_classifier_dataset",
     "refine_positive_crops",
+    "run_biomass_from_labels",
     "run_biomass_stage",
     "run_proposal_pipeline_for_sample",
     "run_refinement_from_manifest",

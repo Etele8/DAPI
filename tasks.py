@@ -122,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
         "cellpose-sweep",
         help="Sweep cellprob_threshold for a model; count cells + write overlays per threshold.",
     )
+    sub.add_parser(
+        "cellpose-biomass",
+        help="Compute biovolume from Cellpose instance-label masks.",
+    )
 
     def _add_sample_cmd(name: str, help_: str, required: bool = True) -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_)
@@ -178,6 +182,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.task == "cellpose-sweep":
         return _run([
             "-m", "src.cellpose_sweep",
+            *extra,
+        ])
+    if args.task == "cellpose-biomass":
+        return _run([
+            "-m", "src.cellpose_biomass",
             *extra,
         ])
     if args.task == "segment":

@@ -10,7 +10,12 @@ import numpy as np
 
 from src.biomass.calibration import Calibration
 from src.biomass.contour_smoothing import smooth_contour
-from src.biomass.contours import ConnectedObject, extract_connected_objects, polygon_area
+from src.biomass.contours import (
+    ConnectedObject,
+    extract_connected_objects,
+    extract_labeled_objects,
+    polygon_area,
+)
 from src.biomass.qc import build_qc_flags, polygon_self_intersects, suspicious_merge
 from src.biomass.volume_baselines import equivalent_sphere_volume_from_area, rod_volume_from_area_and_length
 from src.biomass.volume_zeder import estimate_zeder_volume, longest_chord
@@ -350,21 +355,20 @@ def _write_outputs(
     return BiomassDebugFiles(files=files)
 
 
-def run_biomass_stage(
+def _run_biomass_core(
     *,
     image_id: str,
     original_image: np.ndarray,
-    binary_mask: np.ndarray,
+    connected_objects: list[ConnectedObject],
     output_dir: str | Path,
-    config: BiomassConfig | None = None,
+    config: BiomassConfig,
 ) -> BiomassPipelineResult:
-    config = config or BiomassConfig()
     calibration = Calibration(microns_per_pixel=config.microns_per_pixel)
-    connected_objects = extract_connected_objects(binary_mask)
 
-    labels = np.zeros(binary_mask.shape[:2], dtype=np.int32)
+    labels = np.zeros(original_image.shape[:2], dtype=np.int32)
     for obj in connected_objects:
         labels[obj.mask > 0] = obj.object_id
+    binary_mask = np.where(labels > 0, 255, 0).astype(np.uint8)
 
     measurements: list[BiomassObjectMeasurement] = []
     notes: list[str] = []
@@ -378,7 +382,7 @@ def run_biomass_stage(
     debug_files = _write_outputs(
         Path(output_dir),
         original_image=original_image,
-        binary_mask=np.where(binary_mask > 0, 255, 0).astype(np.uint8),
+        binary_mask=binary_mask,
         labels=labels,
         objects=measurements,
         summary=summary,
@@ -391,4 +395,48 @@ def run_biomass_stage(
         summary=summary,
         debug_files=debug_files,
         approximation_notes=notes,
+    )
+
+
+def run_biomass_stage(
+    *,
+    image_id: str,
+    original_image: np.ndarray,
+    binary_mask: np.ndarray,
+    output_dir: str | Path,
+    config: BiomassConfig | None = None,
+) -> BiomassPipelineResult:
+    """Compute biomass from a binary mask (re-derives instances via connected components)."""
+    config = config or BiomassConfig()
+    connected_objects = extract_connected_objects(binary_mask)
+    return _run_biomass_core(
+        image_id=image_id,
+        original_image=original_image,
+        connected_objects=connected_objects,
+        output_dir=output_dir,
+        config=config,
+    )
+
+
+def run_biomass_from_labels(
+    *,
+    image_id: str,
+    original_image: np.ndarray,
+    label_image: np.ndarray,
+    output_dir: str | Path,
+    config: BiomassConfig | None = None,
+) -> BiomassPipelineResult:
+    """Compute biomass from an instance-label image (e.g. Cellpose output).
+
+    Each non-zero label is treated as one cell, so touching cells already
+    separated by the segmentation model are not re-merged.
+    """
+    config = config or BiomassConfig()
+    connected_objects = extract_labeled_objects(label_image)
+    return _run_biomass_core(
+        image_id=image_id,
+        original_image=original_image,
+        connected_objects=connected_objects,
+        output_dir=output_dir,
+        config=config,
     )

@@ -44,6 +44,50 @@ def ensure_counter_clockwise(points_xy: np.ndarray) -> np.ndarray:
     return points_xy.copy()
 
 
+def extract_labeled_objects(label_image: np.ndarray) -> list[ConnectedObject]:
+    """Build one ConnectedObject per non-zero instance ID in a label image.
+
+    Unlike extract_connected_objects, this trusts the supplied instance labels
+    (e.g. from Cellpose) and does NOT re-run connected components, so cells that
+    merely touch are kept as separate objects.
+    """
+    if label_image.ndim == 3:
+        label_image = cv2.cvtColor(label_image, cv2.COLOR_BGR2GRAY)
+    labels = label_image.astype(np.int32)
+    height, width = labels.shape
+    objects: list[ConnectedObject] = []
+
+    for label_id in (int(v) for v in np.unique(labels) if v != 0):
+        component_mask = np.where(labels == label_id, 255, 0).astype(np.uint8)
+        contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if not contours:
+            continue
+
+        contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(contour)
+        area_px = int(cv2.countNonZero(component_mask))
+        moments = cv2.moments(component_mask, binaryImage=True)
+        if moments["m00"] > 0:
+            centroid = (float(moments["m10"] / moments["m00"]), float(moments["m01"] / moments["m00"]))
+        else:
+            centroid = (x + w / 2.0, y + h / 2.0)
+        touches_border = x == 0 or y == 0 or (x + w) >= width or (y + h) >= height
+
+        objects.append(
+            ConnectedObject(
+                object_id=len(objects) + 1,
+                mask=component_mask,
+                bbox=(int(x), int(y), int(w), int(h)),
+                centroid_xy=centroid,
+                touches_border=touches_border,
+                raw_contour=ensure_counter_clockwise(contour_to_xy(contour)),
+                area_px2_raw=float(area_px),
+            )
+        )
+
+    return objects
+
+
 def extract_connected_objects(binary_mask: np.ndarray) -> list[ConnectedObject]:
     binary_mask = ensure_binary_mask(binary_mask)
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask, connectivity=8)
