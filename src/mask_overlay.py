@@ -10,7 +10,8 @@ it looks for <stem><mask-suffix>.{png,tif,tiff} as the label image. Masks may
 live in a separate directory via --masks-dir.
 
 Defaults assume the Cellpose CLI convention (<stem>_cp_masks.png), but
---mask-suffix lets you overlay ground-truth (_masks) or reconstructed seeds.
+--mask-suffix lets you overlay ground truth (_masks), reconstructed seeds, or
+Cellpose-GUI annotations saved as <stem>_seg.npy (use --mask-suffix _seg).
 """
 
 from __future__ import annotations
@@ -24,9 +25,35 @@ import numpy as np
 
 
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
-_MASK_EXTS = (".png", ".tif", ".tiff")
+_MASK_EXTS = (".npy", ".png", ".tif", ".tiff")
 # Cellpose-generated artefacts that should never be treated as source images.
 _ARTEFACT_MARKERS = ("_cp_outlines", "_cp_flows", "_flows", "_overlay")
+
+
+def _load_npy_masks(path: Path) -> np.ndarray | None:
+    """Pull the instance-label array out of a Cellpose GUI _seg.npy file."""
+    try:
+        data = np.load(path, allow_pickle=True)
+    except Exception:
+        return None
+    if data.dtype == object:
+        try:
+            payload = data.item()
+        except Exception:
+            return None
+        if isinstance(payload, dict):
+            for key in ("masks", "Mask", "labels"):
+                value = payload.get(key)
+                if isinstance(value, np.ndarray):
+                    return value
+        return None
+    return data if data.ndim == 2 else None
+
+
+def _load_mask_any(path: Path) -> np.ndarray | None:
+    if path.suffix.lower() == ".npy":
+        return _load_npy_masks(path)
+    return _read_image(path, flags=cv2.IMREAD_UNCHANGED)
 
 
 def _read_image(path: Path, flags: int = cv2.IMREAD_UNCHANGED) -> np.ndarray | None:
@@ -131,7 +158,7 @@ def process_dir(
         if mask_path is None:
             continue
         image = _read_image(image_path)
-        labels = _read_image(mask_path, flags=cv2.IMREAD_UNCHANGED)
+        labels = _load_mask_any(mask_path)
         if image is None or labels is None:
             print(f"  SKIP {stem}: could not read image or mask")
             continue
@@ -169,7 +196,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--mask-suffix",
         default="_cp_masks",
-        help="Suffix identifying mask files (e.g. _cp_masks for Cellpose CLI output, _masks for ground truth).",
+        help="Suffix identifying mask files. Examples: _cp_masks (Cellpose CLI output), "
+        "_masks (ground-truth .tif), _seg (Cellpose GUI .npy annotations).",
     )
     parser.add_argument(
         "--output-dir",
