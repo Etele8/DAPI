@@ -1,7 +1,9 @@
 #!/bin/bash
 # One-off SLURM job to pull the DAPI Cellpose Docker image as an Apptainer SIF
-# on ITU HPC. The docs explicitly say container pulls should happen in a job,
-# not on the login node (login node cap: ~1.5 CPU cores, no interactive tools).
+# on ITU HPC. Uses the compute node's local /scratch for Apptainer's temp +
+# cache dirs -- extracting thousands of small container-layer files onto an
+# NFS-mounted $HOME is what makes this job time out (30-40 min just for the
+# unpack). Local /scratch NVMe is ~10x faster for that pattern.
 #
 # Submit with:
 #   sbatch docker/hpc/pull_container.job
@@ -15,9 +17,9 @@
 #SBATCH --output=pull_cellpose_%j.out
 #SBATCH --error=pull_cellpose_%j.err
 #SBATCH --partition=scavenge
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=8G
-#SBATCH --time=00:45:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=03:00:00
 
 set -euo pipefail
 
@@ -26,23 +28,40 @@ IMAGE="${IMAGE:-docker://etele8/dapi-cellpose:latest}"
 
 mkdir -p "$(dirname "$SIF")"
 
-# Apptainer needs scratch space to unpack the Docker layers. Home is safe but
-# fills up fast; /scratch on the compute node is faster if you prefer.
-export APPTAINER_TMPDIR="${APPTAINER_TMPDIR:-$HOME/.apptainer/tmp}"
-export APPTAINER_CACHEDIR="${APPTAINER_CACHEDIR:-$HOME/.apptainer/cache}"
-mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
+# Local scratch on the compute node. Falls back to $TMPDIR if /scratch is
+# missing (defensive; ITU compute nodes normally provide it).
+SCRATCH_ROOT="/scratch"
+if [ ! -d "$SCRATCH_ROOT" ]; then
+    SCRATCH_ROOT="${TMPDIR:-/tmp}"
+    echo "WARNING: /scratch not found, falling back to $SCRATCH_ROOT (may be slow)"
+fi
+SCRATCH="$SCRATCH_ROOT/${SLURM_JOB_ID:-pull_$$}"
+mkdir -p "$SCRATCH/tmp" "$SCRATCH/cache"
+export APPTAINER_TMPDIR="$SCRATCH/tmp"
+export APPTAINER_CACHEDIR="$SCRATCH/cache"
+
+# Always clean scratch on exit, even on failure/timeout.
+cleanup() { rm -rf "$SCRATCH"; }
+trap cleanup EXIT INT TERM
+
+echo "Node          : $(hostname)"
+echo "Scratch dir   : $SCRATCH"
+echo "SIF target    : $SIF"
+echo "Image         : $IMAGE"
+echo
+echo "-- disk before pull --"
+df -h "$SCRATCH_ROOT" 2>/dev/null || true
+echo
 
 if [ -f "$SIF" ] && [ "${IMAGE_FORCE:-0}" != "1" ]; then
     echo "$SIF already exists (size: $(du -h "$SIF" | cut -f1)). Skipping."
     echo "Set IMAGE_FORCE=1 to redownload."
     exit 0
 fi
-
-echo "Node       : $(hostname)"
-echo "Pulling    : $IMAGE"
-echo "Writing to : $SIF"
 rm -f "$SIF"
-apptainer pull "$SIF" "$IMAGE"
+
+echo "-- pulling --"
+time apptainer pull "$SIF" "$IMAGE"
 
 echo
 echo "Done. SIF size: $(du -h "$SIF" | cut -f1)"
