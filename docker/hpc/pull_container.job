@@ -28,15 +28,44 @@ IMAGE="${IMAGE:-docker://etele8/dapi-cellpose:latest}"
 
 mkdir -p "$(dirname "$SIF")"
 
-# Local scratch on the compute node. Falls back to $TMPDIR if /scratch is
-# missing (defensive; ITU compute nodes normally provide it).
-SCRATCH_ROOT="/scratch"
-if [ ! -d "$SCRATCH_ROOT" ]; then
-    SCRATCH_ROOT="${TMPDIR:-/tmp}"
-    echo "WARNING: /scratch not found, falling back to $SCRATCH_ROOT (may be slow)"
+# Pick a fast, writable scratch dir on the compute node. The ITU docs
+# recommend /scratch/$SLURM_JOB_ID but some nodes require a per-user parent
+# dir or don't expose /scratch to normal users at all. Try candidates in
+# order of preference (fastest local storage first, NFS home as last resort).
+JOB_TAG="${SLURM_JOB_ID:-pull_$$}"
+SCRATCH=""
+CANDIDATES=(
+    "${SLURM_TMPDIR:-}"                     # SLURM job-local tmp, if set
+    "/scratch/$USER/$JOB_TAG"               # per-user scratch subdir
+    "/scratch/$JOB_TAG"                     # flat scratch (docs example)
+    "/local_scratch/$USER/$JOB_TAG"         # some nodes
+    "/tmp/$USER/$JOB_TAG"                   # /tmp fallback
+    "$HOME/.apptainer_scratch/$JOB_TAG"     # NFS home (slow last resort)
+)
+
+echo "-- scratch discovery --"
+for base in /scratch /scratch/$USER /local_scratch /tmp "${SLURM_TMPDIR:-}"; do
+    [ -z "$base" ] && continue
+    ls -ld "$base" 2>&1 | head -1
+done
+echo
+
+for candidate in "${CANDIDATES[@]}"; do
+    [ -z "$candidate" ] && continue
+    if mkdir -p "$candidate/tmp" "$candidate/cache" 2>/dev/null; then
+        SCRATCH="$candidate"
+        echo "Using scratch: $SCRATCH"
+        break
+    else
+        echo "  not writable: $candidate"
+    fi
+done
+
+if [ -z "$SCRATCH" ]; then
+    echo "ERROR: could not create a scratch directory in any expected location" >&2
+    exit 1
 fi
-SCRATCH="$SCRATCH_ROOT/${SLURM_JOB_ID:-pull_$$}"
-mkdir -p "$SCRATCH/tmp" "$SCRATCH/cache"
+
 export APPTAINER_TMPDIR="$SCRATCH/tmp"
 export APPTAINER_CACHEDIR="$SCRATCH/cache"
 
@@ -44,13 +73,14 @@ export APPTAINER_CACHEDIR="$SCRATCH/cache"
 cleanup() { rm -rf "$SCRATCH"; }
 trap cleanup EXIT INT TERM
 
+echo
 echo "Node          : $(hostname)"
 echo "Scratch dir   : $SCRATCH"
 echo "SIF target    : $SIF"
 echo "Image         : $IMAGE"
 echo
-echo "-- disk before pull --"
-df -h "$SCRATCH_ROOT" 2>/dev/null || true
+echo "-- disk on scratch --"
+df -h "$SCRATCH" 2>/dev/null || true
 echo
 
 if [ -f "$SIF" ] && [ "${IMAGE_FORCE:-0}" != "1" ]; then
