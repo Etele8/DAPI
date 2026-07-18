@@ -1,0 +1,74 @@
+#!/bin/bash
+# SLURM training job for Cellpose fine-tuning on ITU HPC.
+#
+# Runs the same command as docker/runpod_train.sh but under Apptainer + SLURM
+# instead of Docker + RunPod. Data lives on your $HOME (bind-mounted into the
+# container as /data); the trained model file is written to $DATA_DIR/train/
+# models/ which stays on the host, so no post-job copy is needed.
+#
+# Submit with:
+#   sbatch docker/hpc/train.job
+#     -> uses $HOME/DAPI_data/cellpose_fullimage_train
+#   sbatch docker/hpc/train.job /path/to/my_data
+#     -> data dir contains train/ + val/
+#   sbatch docker/hpc/train.job /path/to/my_data --n_epochs 60 --learning_rate 5e-6
+#     -> extra flags are passed through to `python -m cellpose --train`
+
+#SBATCH --job-name=cellpose_train
+#SBATCH --output=cellpose_train_%j.out
+#SBATCH --error=cellpose_train_%j.err
+#SBATCH --partition=acltr
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+# NOTE: --partition=acltr covers the general-access GPU nodes (V100, A30, A100,
+# RTX8000, ...). Avoid the dgx1 partition -- the Grace Blackwell chips there
+# are ARM, and this SIF is x86_64.
+
+set -euo pipefail
+
+DATA_DIR="${1:-$HOME/DAPI_data/cellpose_fullimage_train}"
+if [ "$#" -gt 0 ]; then shift; fi
+
+SIF="${SIF:-$HOME/containers/dapi-cellpose.sif}"
+
+if [ ! -f "$SIF" ]; then
+    echo "ERROR: Apptainer image not found at $SIF" >&2
+    echo "Run: sbatch docker/hpc/pull_container.job" >&2
+    exit 1
+fi
+if [ ! -d "$DATA_DIR/train" ] || [ ! -d "$DATA_DIR/val" ]; then
+    echo "ERROR: expected $DATA_DIR/train and $DATA_DIR/val to exist" >&2
+    exit 1
+fi
+
+echo "Node       : $(hostname)"
+echo "Data       : $DATA_DIR"
+echo "SIF        : $SIF"
+echo
+nvidia-smi | head -25
+echo
+
+# --nv enables NVIDIA driver + CUDA passthrough from the host into the container.
+# --bind maps $DATA_DIR (on the host) to /data (inside the container).
+apptainer exec --nv \
+    --bind "$DATA_DIR:/data" \
+    "$SIF" \
+    python -m cellpose --train \
+        --dir /data/train \
+        --test_dir /data/val \
+        --pretrained_model cyto3 \
+        --mask_filter _masks \
+        --learning_rate 1e-5 \
+        --weight_decay 0.1 \
+        --n_epochs 100 \
+        --save_every 10 \
+        --batch_size 8 \
+        --min_train_masks 1 \
+        --use_gpu \
+        --verbose \
+        "$@"
+
+echo
+echo "Trained model(s) in: $DATA_DIR/train/models/"

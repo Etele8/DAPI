@@ -1,0 +1,48 @@
+#!/bin/bash
+# One-off SLURM job to pull the DAPI Cellpose Docker image as an Apptainer SIF
+# on ITU HPC. The docs explicitly say container pulls should happen in a job,
+# not on the login node (login node cap: ~1.5 CPU cores, no interactive tools).
+#
+# Submit with:
+#   sbatch docker/hpc/pull_container.job
+#
+# Optional overrides:
+#   sbatch docker/hpc/pull_container.job /path/to/output.sif
+#   IMAGE=docker://etele8/dapi-cellpose:latest sbatch docker/hpc/pull_container.job
+#   IMAGE_FORCE=1 sbatch docker/hpc/pull_container.job     # redownload even if SIF exists
+
+#SBATCH --job-name=pull_cellpose_sif
+#SBATCH --output=pull_cellpose_%j.out
+#SBATCH --error=pull_cellpose_%j.err
+#SBATCH --partition=scavenge
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=00:45:00
+
+set -euo pipefail
+
+SIF="${1:-$HOME/containers/dapi-cellpose.sif}"
+IMAGE="${IMAGE:-docker://etele8/dapi-cellpose:latest}"
+
+mkdir -p "$(dirname "$SIF")"
+
+# Apptainer needs scratch space to unpack the Docker layers. Home is safe but
+# fills up fast; /scratch on the compute node is faster if you prefer.
+export APPTAINER_TMPDIR="${APPTAINER_TMPDIR:-$HOME/.apptainer/tmp}"
+export APPTAINER_CACHEDIR="${APPTAINER_CACHEDIR:-$HOME/.apptainer/cache}"
+mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
+
+if [ -f "$SIF" ] && [ "${IMAGE_FORCE:-0}" != "1" ]; then
+    echo "$SIF already exists (size: $(du -h "$SIF" | cut -f1)). Skipping."
+    echo "Set IMAGE_FORCE=1 to redownload."
+    exit 0
+fi
+
+echo "Node       : $(hostname)"
+echo "Pulling    : $IMAGE"
+echo "Writing to : $SIF"
+rm -f "$SIF"
+apptainer pull "$SIF" "$IMAGE"
+
+echo
+echo "Done. SIF size: $(du -h "$SIF" | cut -f1)"
