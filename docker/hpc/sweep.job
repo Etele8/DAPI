@@ -34,7 +34,7 @@ MODEL="${1:?Usage: sbatch sweep.job <model_path> [<data_dir>] [-- extra flags]}"
 DATA_DIR="${2:-$HOME/DAPI_data/cellpose_fullimage_train/val}"
 if [ "$#" -ge 2 ]; then shift 2; else shift 1; fi
 
-REPO="${REPO:-$HOME/DAPI}"
+REPO="${REPO:-$HOME/projects/DAPI}"
 SIF="${SIF:-$HOME/containers/dapi-cellpose.sif}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/DAPI_data/sweeps/${SLURM_JOB_ID:-manual}}"
 
