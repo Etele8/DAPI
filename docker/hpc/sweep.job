@@ -55,7 +55,12 @@ nvidia-smi | head -20
 echo
 
 # $HOME is auto-bind-mounted by Apptainer, so HPC absolute paths pass through.
-apptainer exec --nv "$SIF" \
+# passwd/group bound so UID lookups succeed on nodes where the host user
+# database isn't passed through by default.
+apptainer exec --nv \
+    --bind /etc/passwd:/etc/passwd:ro \
+    --bind /etc/group:/etc/group:ro \
+    "$SIF" \
     bash -c "cd '$REPO' && python -m src.cellpose_sweep \
         --model '$MODEL' \
         --dir '$DATA_DIR' \

@@ -51,8 +51,14 @@ nvidia-smi | head -20
 echo
 
 # $HOME is bind-mounted by Apptainer by default, so HPC absolute paths pass
-# through unchanged. Cellpose writes <stem>_cp_masks.png next to each input.
-apptainer exec --nv "$SIF" \
+# through unchanged. /etc/passwd + /etc/group are bound in so that user-id
+# 54076 (or whoever) resolves to a username inside the container -- some
+# ITU nodes ship an Apptainer setup where the host's passwd/group aren't
+# passed through and Python/Cellpose then fails with "unknown userid".
+apptainer exec --nv \
+    --bind /etc/passwd:/etc/passwd:ro \
+    --bind /etc/group:/etc/group:ro \
+    "$SIF" \
     python -m cellpose \
         --dir "$IMAGES_DIR" \
         --pretrained_model "$MODEL" \

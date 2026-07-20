@@ -52,8 +52,13 @@ echo
 
 # --nv enables NVIDIA driver + CUDA passthrough from the host into the container.
 # --bind maps $DATA_DIR (on the host) to /data (inside the container).
+# passwd/group bound so UID lookups succeed on nodes where the host user
+# database isn't passed through by default (some ITU nodes fail otherwise
+# with "Couldn't determine user account information: unknown userid").
 apptainer exec --nv \
     --bind "$DATA_DIR:/data" \
+    --bind /etc/passwd:/etc/passwd:ro \
+    --bind /etc/group:/etc/group:ro \
     "$SIF" \
     python -m cellpose --train \
         --dir /data/train \
