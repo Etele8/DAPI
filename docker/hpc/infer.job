@@ -1,0 +1,67 @@
+#!/bin/bash
+# SLURM job: batch inference with a trained Cellpose model on ITU HPC.
+#
+# Usage:
+#   sbatch docker/hpc/infer.job <model_path> [<images_dir>] [-- extra flags]
+#
+# Examples:
+#   # Full-size sample images, default threshold -0.75:
+#   sbatch docker/hpc/infer.job \
+#       ~/DAPI_data/cellpose_fullimage_train/train/models/cellpose_1721... \
+#       ~/DAPI_data/predictions
+#
+#   # Override the threshold (use = to avoid argparse tripping on the leading -):
+#   sbatch docker/hpc/infer.job MODEL IMAGES --cellprob_threshold=-1
+#
+# Defaults:
+#   images_dir = $HOME/DAPI_data/predictions
+#   sif        = $HOME/containers/dapi-cellpose.sif    (override with SIF=...)
+#   threshold  = -0.75 (locked from the sweep; pass --cellprob_threshold=... to override)
+#
+# Writes <stem>_cp_masks.png next to each input image.
+
+#SBATCH --job-name=cellpose_infer
+#SBATCH --output=cellpose_infer_%j.out
+#SBATCH --error=cellpose_infer_%j.err
+#SBATCH --partition=acltr
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=01:00:00
+
+set -euo pipefail
+
+MODEL="${1:?Usage: sbatch infer.job <model_path> [<images_dir>] [-- extra flags]}"
+IMAGES_DIR="${2:-$HOME/DAPI_data/predictions}"
+if [ "$#" -ge 2 ]; then shift 2; else shift 1; fi
+
+SIF="${SIF:-$HOME/containers/dapi-cellpose.sif}"
+
+[ -f "$SIF" ]      || { echo "SIF not found: $SIF"        >&2; exit 1; }
+[ -f "$MODEL" ]    || { echo "Model not found: $MODEL"    >&2; exit 1; }
+[ -d "$IMAGES_DIR" ] || { echo "Images dir not found: $IMAGES_DIR" >&2; exit 1; }
+
+echo "Node       : $(hostname)"
+echo "Model      : $MODEL"
+echo "Images dir : $IMAGES_DIR"
+echo "SIF        : $SIF"
+echo "Threshold  : -0.75 (default; override via --cellprob_threshold=...)"
+echo
+nvidia-smi | head -20
+echo
+
+# $HOME is bind-mounted by Apptainer by default, so HPC absolute paths pass
+# through unchanged. Cellpose writes <stem>_cp_masks.png next to each input.
+apptainer exec --nv "$SIF" \
+    python -m cellpose \
+        --dir "$IMAGES_DIR" \
+        --pretrained_model "$MODEL" \
+        --cellprob_threshold -0.75 \
+        --save_png \
+        --no_npy \
+        --use_gpu \
+        --verbose \
+        "$@"
+
+echo
+echo "Predictions written to $IMAGES_DIR (as <stem>_cp_masks.png)"
