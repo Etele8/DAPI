@@ -1,0 +1,66 @@
+#!/bin/bash
+# SLURM job: sweep cellprob_threshold for a Cellpose model on ITU HPC.
+#
+# Usage:
+#   sbatch docker/hpc/sweep.job <model_path> [<data_dir>] [-- extra flags]
+#
+# Examples:
+#   sbatch docker/hpc/sweep.job \
+#       ~/DAPI_data/cellpose_fullimage_train/train/models/cellpose_1721...
+#
+#   sbatch docker/hpc/sweep.job \
+#       ~/DAPI_data/cellpose_fullimage_train/train/models/cellpose_1721... \
+#       ~/DAPI_data/cellpose_fullimage_train/val \
+#       --thresholds 1,0.5,0,-0.5,-1
+#
+# Defaults:
+#   data_dir  = $HOME/DAPI_data/cellpose_fullimage_train/val
+#   output    = $HOME/DAPI_data/sweeps/$SLURM_JOB_ID   (override with OUTPUT_DIR=...)
+#   repo      = $HOME/DAPI                             (override with REPO=...)
+#   sif       = $HOME/containers/dapi-cellpose.sif     (override with SIF=...)
+
+#SBATCH --job-name=cellpose_sweep
+#SBATCH --output=cellpose_sweep_%j.out
+#SBATCH --error=cellpose_sweep_%j.err
+#SBATCH --partition=acltr
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --time=00:30:00
+
+set -euo pipefail
+
+MODEL="${1:?Usage: sbatch sweep.job <model_path> [<data_dir>] [-- extra flags]}"
+DATA_DIR="${2:-$HOME/DAPI_data/cellpose_fullimage_train/val}"
+if [ "$#" -ge 2 ]; then shift 2; else shift 1; fi
+
+REPO="${REPO:-$HOME/DAPI}"
+SIF="${SIF:-$HOME/containers/dapi-cellpose.sif}"
+OUTPUT_DIR="${OUTPUT_DIR:-$HOME/DAPI_data/sweeps/${SLURM_JOB_ID:-manual}}"
+
+[ -f "$SIF" ]        || { echo "SIF not found: $SIF"        >&2; exit 1; }
+[ -f "$MODEL" ]      || { echo "Model not found: $MODEL"    >&2; exit 1; }
+[ -d "$DATA_DIR" ]   || { echo "Data dir not found: $DATA_DIR" >&2; exit 1; }
+[ -d "$REPO/src" ]   || { echo "DAPI source not found at $REPO/src (git clone first)" >&2; exit 1; }
+
+mkdir -p "$OUTPUT_DIR"
+
+echo "Node    : $(hostname)"
+echo "Repo    : $REPO"
+echo "Model   : $MODEL"
+echo "Data    : $DATA_DIR"
+echo "Output  : $OUTPUT_DIR"
+echo
+nvidia-smi | head -20
+echo
+
+# $HOME is auto-bind-mounted by Apptainer, so HPC absolute paths pass through.
+apptainer exec --nv "$SIF" \
+    bash -c "cd '$REPO' && python -m src.cellpose_sweep \
+        --model '$MODEL' \
+        --dir '$DATA_DIR' \
+        --output-dir '$OUTPUT_DIR' \
+        $*"
+
+echo
+echo "Sweep outputs -> $OUTPUT_DIR"
